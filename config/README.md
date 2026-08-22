@@ -51,7 +51,20 @@ O fallback fica em `offline-installers.psd1`. Cada entrada exige `PackageId`, ca
 
 ## WSL
 
-`DefaultVersion = 2` define o padrão. `Distribution = ''` não instala distribuição automaticamente. Informe um nome aceito por `wsl --install --distribution` se desejar incluí-la.
+`DefaultVersion = 2` define o padrão global. `Distribution = ''` mantém desativado o mecanismo legado de instalação centralizada.
+
+`WSL.Environments` descreve as distribuições registradas por conta Windows. Cada entrada informa:
+
+- `Enabled`: se o ambiente deve ser preparado;
+- `AccountKey`: chave da conta em `Accounts`;
+- `Distribution`: nome aceito por `wsl --install --distribution`;
+- `Profile`: PSD1 relativo ao projeto com usuário Linux, raiz de projetos e pacotes APT.
+
+O bootstrap principal não tenta criar essas distribuições na sessão administrativa. Entre em cada conta e use `wsl\bootstrap.ps1`; consulte [`../wsl/README.md`](../wsl/README.md).
+
+## Inventário do Winget
+
+`Runtime.WingetInventoryPath` define o JSON estável com IDs, versões e fontes realmente encontrados depois da instalação. O arquivo é estado local gerado e não deve ser adicionado ao repositório.
 
 ## Recuperação
 

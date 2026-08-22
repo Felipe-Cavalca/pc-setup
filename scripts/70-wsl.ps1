@@ -23,6 +23,8 @@ $actions = @()
 if ($configuration.WSL.Update) { $actions += 'Update' }
 if ([int]$configuration.WSL.DefaultVersion -gt 0) { $actions += "DefaultVersion=$($configuration.WSL.DefaultVersion)" }
 if (-not [string]::IsNullOrWhiteSpace([string]$configuration.WSL.Distribution)) { $actions += "Install=$($configuration.WSL.Distribution)" }
+$environments = @(Get-PcSetupWslEnvironments -Configuration $configuration | Where-Object Enabled)
+foreach ($environment in $environments) { $actions += "PerUser=$($environment.Name):$($environment.WindowsAccount):$($environment.Distribution)" }
 
 if ($mode -eq 'Plan') {
     Write-Host "[PLANO] WSL: $($actions -join ', ')."
@@ -47,4 +49,7 @@ if (-not [string]::IsNullOrWhiteSpace([string]$configuration.WSL.Distribution)) 
 }
 
 Write-Host '[OK] Configuracao do WSL concluida. Distribuicoes e ambientes continuam separados por usuario.' -ForegroundColor Green
-[pscustomobject]@{ Step = 'WSL'; Mode = $mode; Enabled = $true; Items = $actions }
+foreach ($environment in $environments) {
+    Write-Host "[PENDENTE POR USUARIO] Entre como $($environment.WindowsAccount) e execute .\wsl\bootstrap.ps1 -Environment $($environment.Name) -Apply." -ForegroundColor Yellow
+}
+[pscustomobject]@{ Step = 'WSL'; Mode = $mode; Enabled = $true; Items = $actions; Environments = $environments }

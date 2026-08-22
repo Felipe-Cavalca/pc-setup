@@ -82,6 +82,7 @@ $baseReport = [ordered]@{
         DataMode   = $storage.DataMode
         DataVolume = $storage.DataVolume
     }
+    Recovery     = $null
     Steps        = @()
     Status       = 'Running'
     CompletedAt  = $null
@@ -160,6 +161,14 @@ try {
             }
         }
         Write-PcSetupJson -InputObject $applyState -Path $applyStatePath | Out-Null
+    }
+
+    $baseReport.Recovery = @{
+        Description    = $restorePoint.Description
+        SequenceNumber = $restorePoint.SequenceNumber
+        SessionId      = $restorePoint.SessionId
+        Validated      = $true
+        Resumed        = $isResume
     }
 
     if (-not $isResume -or $applyState.Stage -eq 'Starting') {

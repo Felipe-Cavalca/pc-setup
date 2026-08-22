@@ -55,7 +55,7 @@ function Import-PcSetupConfiguration {
         Debloat        = @('Enabled','Mode','Repository','Release','ArchiveSha256','RequireSha256','RequireConfirmation')
         Recovery       = @('RequireRestorePointBeforeChanges','Scope','SystemProtectionMustBeEnabled','EnableSystemProtectionAutomatically','FailIfRestorePointUnavailable','AllowExistingRestorePointReuse','AllowSameApplySessionReuse','ProtectDirectScriptExecution')
         Security       = @('DailyUserMustBeStandard','BackupAclBeforeChanges','ManageBitLocker','BitLockerMode','ReportBitLockerStatus','RequireRecoveryKeyCheck','DemoteDailyUserAutomatically')
-        Runtime        = @('StateDirectory','ReportDirectory','StopOnError','RequirePlanBeforeApply')
+        Runtime        = @('StateDirectory','ReportDirectory','WingetInventoryPath','StopOnError','RequirePlanBeforeApply')
     }
     foreach ($section in $requiredKeys.Keys) {
         foreach ($key in $requiredKeys[$section]) { Assert-PcSetupTableKey -Table $configuration[$section] -Key $key -Path "config.$section" }
@@ -95,6 +95,22 @@ function Import-PcSetupConfiguration {
     if ($configuration.Recovery.AllowExistingRestorePointReuse -ne $false) { throw 'Pontos de outras execucoes nao podem ser reutilizados.' }
     if ($configuration.Recovery.AllowSameApplySessionReuse -ne $true) { throw 'AllowSameApplySessionReuse deve permanecer true para retomadas seguras apos reinicio.' }
     if ($configuration.WSL.DefaultVersion -notin @(1, 2)) { throw 'WSL.DefaultVersion deve ser 1 ou 2.' }
+    if ($configuration.WSL.ContainsKey('Environments')) {
+        if (-not ($configuration.WSL.Environments -is [hashtable])) { throw 'WSL.Environments deve ser uma hashtable.' }
+        foreach ($environmentName in @($configuration.WSL.Environments.Keys)) {
+            if ([string]$environmentName -notmatch '^[A-Za-z][A-Za-z0-9_-]*$') { throw "Nome de ambiente WSL invalido: $environmentName" }
+            $environment = $configuration.WSL.Environments[$environmentName]
+            if (-not ($environment -is [hashtable])) { throw "WSL.Environments.$environmentName deve ser uma hashtable." }
+            foreach ($key in @('Enabled','AccountKey','Distribution','Profile')) {
+                Assert-PcSetupTableKey -Table $environment -Key $key -Path "config.WSL.Environments.$environmentName"
+            }
+            if ($environment.AccountKey -notin @('DailyUser','RecoveryAdmin','Codex','God','Public')) { throw "AccountKey invalido no ambiente WSL ${environmentName}: $($environment.AccountKey)" }
+            if ([string]$environment.Distribution -notmatch '^[A-Za-z0-9._-]+$') { throw "Distribution invalida no ambiente WSL ${environmentName}: $($environment.Distribution)" }
+            if ([IO.Path]::IsPathRooted([string]$environment.Profile) -or [string]$environment.Profile -match '(^|[\\/])\.\.([\\/]|$)') { throw "Profile invalido no ambiente WSL ${environmentName}." }
+            if ($environment.Enabled -and -not $configuration.Features.WSL) { throw "O ambiente WSL $environmentName esta habilitado, mas Features.WSL esta desabilitado." }
+            if ($environment.Enabled -and -not $configuration.Accounts[[string]$environment.AccountKey].Enabled) { throw "O ambiente WSL $environmentName usa uma conta Windows desabilitada." }
+        }
+    }
     if ($configuration.Packages.PreferredSource -ne 'winget' -or -not $configuration.Packages.PreferCurrentVersion) { throw 'Pacotes devem usar Winget e preferir a versao atual.' }
     if ([int]$configuration.Packages.RetryCount -lt 0 -or [int]$configuration.Packages.RetryCount -gt 5) { throw 'Packages.RetryCount deve ficar entre 0 e 5.' }
     if ([string]::IsNullOrWhiteSpace([string]$configuration.Packages.OfflineManifest)) { throw 'Packages.OfflineManifest nao pode ficar vazio.' }
@@ -135,6 +151,9 @@ function Import-PcSetupConfiguration {
 
     $configuration['_ConfigPath'] = $resolvedPath
     $configuration['_ProjectRoot'] = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+    foreach ($environment in @(Get-PcSetupWslEnvironments -Configuration $configuration)) {
+        Import-PcSetupWslProfile -Configuration $configuration -Environment $environment | Out-Null
+    }
     return $configuration
 }
 
@@ -379,6 +398,55 @@ function Get-PcSetupAccounts {
     return $accounts
 }
 
+function Get-PcSetupWslEnvironments {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][hashtable]$Configuration)
+
+    if (-not $Configuration.WSL.ContainsKey('Environments')) { return @() }
+    $result = @()
+    foreach ($name in @($Configuration.WSL.Environments.Keys | Sort-Object)) {
+        $definition = $Configuration.WSL.Environments[$name]
+        $account = $Configuration.Accounts[[string]$definition.AccountKey]
+        $result += [pscustomobject]@{
+            Name           = [string]$name
+            Enabled        = [bool]$definition.Enabled
+            AccountKey     = [string]$definition.AccountKey
+            WindowsAccount = [string]$account.Name
+            Distribution   = [string]$definition.Distribution
+            Profile        = [string]$definition.Profile
+        }
+    }
+    return $result
+}
+
+function Import-PcSetupWslProfile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$Configuration,
+        [Parameter(Mandatory)]$Environment
+    )
+
+    $path = Resolve-PcSetupProjectPath -Configuration $Configuration -Value ([string]$Environment.Profile) -SettingName "WSL.Environments.$($Environment.Name).Profile"
+    $profile = Import-PowerShellDataFile -LiteralPath $path -ErrorAction Stop
+    if (-not ($profile -is [hashtable])) { throw "O perfil WSL deve retornar uma hashtable: $path" }
+    foreach ($key in @('SchemaVersion','LinuxUser','ProjectRoot','Packages')) { Assert-PcSetupTableKey -Table $profile -Key $key -Path "WSL profile $($Environment.Name)" }
+    if ($profile.SchemaVersion -ne '1.0') { throw "SchemaVersion WSL nao suportada em $path." }
+    if ([string]$profile.LinuxUser -notmatch '^[a-z_][a-z0-9_-]{0,31}$') { throw "LinuxUser invalido em $path." }
+    $projectRoot = ([string]$profile.ProjectRoot).Replace('{LinuxUser}', [string]$profile.LinuxUser)
+    if (-not $projectRoot.StartsWith('/home/', [StringComparison]::Ordinal) -or $projectRoot -match '(^|/)\.\.(/|$)') { throw "ProjectRoot deve ficar em /home no perfil WSL: $path" }
+    $packages = @()
+    foreach ($package in @($profile.Packages)) {
+        $name = [string]$package
+        if ($name -notmatch '^[a-z0-9][a-z0-9+.-]*$') { throw "Pacote APT invalido no perfil WSL ${path}: $name" }
+        if ($packages -contains $name) { throw "Pacote APT duplicado no perfil WSL ${path}: $name" }
+        $packages += $name
+    }
+    $profile.ProjectRoot = $projectRoot
+    $profile.Packages = $packages
+    $profile['_ProfilePath'] = $path
+    return $profile
+}
+
 function Get-PcSetupPackageIds {
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$Configuration)
@@ -416,10 +484,15 @@ function Get-PcSetupProjectFingerprint {
 
     $files = @(
         (Join-Path $Configuration._ProjectRoot 'bootstrap.ps1'),
+        (Join-Path $Configuration._ProjectRoot 'verify.ps1'),
         $Configuration._ConfigPath,
         (Resolve-PcSetupProjectPath -Configuration $Configuration -Value ([string]$Configuration.Packages.OfflineManifest) -SettingName 'Packages.OfflineManifest')
     )
     $files += @(Get-ChildItem -LiteralPath (Join-Path $Configuration._ProjectRoot 'scripts') -Recurse -File | Where-Object { $_.Extension -in @('.ps1','.psm1') } | ForEach-Object FullName)
+    $wslRoot = Join-Path $Configuration._ProjectRoot 'wsl'
+    if (Test-Path -LiteralPath $wslRoot -PathType Container) {
+        $files += @(Get-ChildItem -LiteralPath $wslRoot -Recurse -File | Where-Object { $_.Extension -in @('.ps1','.psd1','.sh','.cmd') } | ForEach-Object FullName)
+    }
     foreach ($profile in @($Configuration.Packages.Profiles)) {
         $files += Join-Path $Configuration._ProjectRoot "config\packages\$profile.txt"
     }
@@ -434,4 +507,4 @@ function Get-PcSetupProjectFingerprint {
     finally { $sha.Dispose() }
 }
 
-Export-ModuleMember -Function Get-PcSetupExecutionMode, Test-PcSetupAdministrator, Assert-PcSetupAdministrator, Import-PcSetupConfiguration, Resolve-PcSetupTemplate, Get-PcSetupStorageInventory, Resolve-PcSetupStorage, Get-PcSetupConfiguredPaths, Get-PcSetupRuntimePath, Resolve-PcSetupProjectPath, Get-PcSetupAccounts, Get-PcSetupPackageIds, Write-PcSetupJson, Get-PcSetupProjectFingerprint
+Export-ModuleMember -Function Get-PcSetupExecutionMode, Test-PcSetupAdministrator, Assert-PcSetupAdministrator, Import-PcSetupConfiguration, Resolve-PcSetupTemplate, Get-PcSetupStorageInventory, Resolve-PcSetupStorage, Get-PcSetupConfiguredPaths, Get-PcSetupRuntimePath, Resolve-PcSetupProjectPath, Get-PcSetupAccounts, Get-PcSetupWslEnvironments, Import-PcSetupWslProfile, Get-PcSetupPackageIds, Write-PcSetupJson, Get-PcSetupProjectFingerprint

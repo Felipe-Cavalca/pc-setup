@@ -106,6 +106,20 @@
         Update         = $true
         DefaultVersion = 2
         Distribution   = ''
+        Environments   = @{
+            DailyUser = @{
+                Enabled      = $true
+                AccountKey   = 'DailyUser'
+                Distribution = 'Ubuntu-24.04'
+                Profile      = 'wsl\profiles\daily-user.psd1'
+            }
+            Codex = @{
+                Enabled      = $true
+                AccountKey   = 'Codex'
+                Distribution = 'Ubuntu-24.04'
+                Profile      = 'wsl\profiles\codex.psd1'
+            }
+        }
     }
 
     Personalization = @{
@@ -148,6 +162,7 @@
     Runtime = @{
         StateDirectory  = '{ProgramData}\pc-setup'
         ReportDirectory = '{ProgramData}\pc-setup\reports'
+        WingetInventoryPath = '{ProgramData}\pc-setup\winget-installed.json'
         StopOnError     = $true
         RequirePlanBeforeApply = $true
     }

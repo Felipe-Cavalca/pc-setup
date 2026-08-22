@@ -9,8 +9,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $coreModule = Join-Path $PSScriptRoot 'lib\PcSetup.Core.psm1'
 $recoveryModule = Join-Path $PSScriptRoot 'lib\PcSetup.Recovery.psm1'
+$wingetModule = Join-Path $PSScriptRoot 'lib\PcSetup.Winget.psm1'
 Import-Module $coreModule -Force
 Import-Module $recoveryModule -Force
+Import-Module $wingetModule -Force
 
 $mode = Get-PcSetupExecutionMode -Plan:$Plan -Apply:$Apply
 $configuration = Import-PcSetupConfiguration -Path $Config
@@ -106,4 +108,14 @@ foreach ($id in $packageIds) {
     $results += [pscustomobject]@{ PackageId = $id; Source = 'offline'; Status = 'Success'; ExitCode = $exitCode }
 }
 
-[pscustomobject]@{ Step = 'Packages'; Mode = $mode; Enabled = $true; Items = $results }
+$configHash = (Get-FileHash -LiteralPath $configuration._ConfigPath -Algorithm SHA256).Hash
+$projectHash = Get-PcSetupProjectFingerprint -Configuration $configuration
+$inventory = Get-PcSetupWingetInstalledInventory -PackageIds $packageIds -ConfigSha256 $configHash -ProjectSha256 $projectHash -RequireAll
+$inventoryPath = Get-PcSetupRuntimePath -Configuration $configuration -Key 'WingetInventoryPath'
+$reportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'ReportDirectory'
+$archivePath = Join-Path $reportDirectory ('winget-installed-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json')
+Write-PcSetupJson -InputObject $inventory -Path $inventoryPath | Out-Null
+Write-PcSetupJson -InputObject $inventory -Path $archivePath | Out-Null
+Write-Host "[RELATORIO] Versoes instaladas pelo Winget: $inventoryPath" -ForegroundColor Green
+
+[pscustomobject]@{ Step = 'Packages'; Mode = $mode; Enabled = $true; Items = $results; InventoryPath = $inventoryPath; InventoryArchive = $archivePath; Inventory = $inventory }

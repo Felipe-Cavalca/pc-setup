@@ -7,9 +7,15 @@ param(
 
 $ErrorActionPreference = 'Continue'
 $coreModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Core.psm1'
+$wingetModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Winget.psm1'
+$wslModule = Join-Path $PSScriptRoot 'wsl\PcSetup.Wsl.psm1'
 Import-Module $coreModule -Force
+Import-Module $wingetModule -Force
+Import-Module $wslModule -Force
 $configuration = Import-PcSetupConfiguration -Path $Config
 Assert-PcSetupAdministrator
+$configHash = (Get-FileHash -LiteralPath $configuration._ConfigPath -Algorithm SHA256).Hash
+$projectHash = Get-PcSetupProjectFingerprint -Configuration $configuration
 
 $checks = @()
 $information = [ordered]@{}
@@ -38,6 +44,14 @@ try {
 }
 catch { Add-Check -Status 'FAIL' -Name 'Windows' -Detail $_.Exception.Message }
 
+$desiredComputerName = [string]$configuration.Machine.ComputerName
+if ([string]::IsNullOrWhiteSpace($desiredComputerName)) {
+    Add-Check -Status 'INFO' -Name 'Nome do computador' -Detail "preservado pela configuracao; atual=$env:COMPUTERNAME"
+}
+else {
+    Add-Check -Status $(if ($env:COMPUTERNAME -eq $desiredComputerName) { 'PASS' } else { 'FAIL' }) -Name 'Nome do computador' -Detail "esperado=$desiredComputerName; atual=$env:COMPUTERNAME"
+}
+
 try {
     $licensing = Get-CimInstance SoftwareLicensingProduct -Filter "Name like 'Windows%' and PartialProductKey is not null" -ErrorAction Stop | Where-Object LicenseStatus -eq 1 | Select-Object -First 1
     Add-Check -Status $(if ($licensing) { 'PASS' } else { 'WARN' }) -Name 'Ativacao' -Detail $(if ($licensing) { 'Windows ativado' } else { 'licenca ativa nao encontrada' })
@@ -52,6 +66,23 @@ try {
     Add-Check -Status 'PASS' -Name 'Armazenamento' -Detail "Windows=$($storage.SystemRoot); dados=$($storage.DataRoot); modo=$($storage.DataMode)"
 }
 catch { Add-Check -Status 'FAIL' -Name 'Armazenamento' -Detail $_.Exception.Message }
+
+try {
+    $runtimeReportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'ReportDirectory' -SystemRoot $(if ($storage) { $storage.SystemRoot } else { $null })
+    $latestApplyReportFile = Get-ChildItem -LiteralPath $runtimeReportDirectory -Filter 'pc-setup-apply-*.json' -File -ErrorAction Stop | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $latestApplyReportFile) {
+        Add-Check -Status 'WARN' -Name 'Relatorio de aplicacao' -Detail 'nenhum relatorio Apply encontrado'
+    }
+    else {
+        $latestApplyReport = Get-Content -LiteralPath $latestApplyReportFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+        Add-Check -Status $(if ($latestApplyReport.Status -eq 'Completed') { 'PASS' } else { 'FAIL' }) -Name 'Aplicacao concluida' -Detail "$($latestApplyReport.Status); $($latestApplyReportFile.FullName)"
+        Add-Check -Status $(if ($latestApplyReport.ConfigSha256 -eq $configHash) { 'PASS' } else { 'FAIL' }) -Name 'Configuracao aplicada' -Detail $(if ($latestApplyReport.ConfigSha256 -eq $configHash) { $configHash } else { 'o relatorio pertence a outra configuracao' })
+        Add-Check -Status $(if ($latestApplyReport.ProjectSha256 -eq $projectHash) { 'PASS' } else { 'WARN' }) -Name 'Versao do projeto aplicada' -Detail $(if ($latestApplyReport.ProjectSha256 -eq $projectHash) { $projectHash } else { 'o projeto mudou depois da ultima aplicacao' })
+        $recoveryValidated = $latestApplyReport.Recovery -and $latestApplyReport.Recovery.Validated -eq $true -and $latestApplyReport.Recovery.SequenceNumber
+        Add-Check -Status $(if ($recoveryValidated) { 'PASS' } else { 'WARN' }) -Name 'Ponto de restauracao da aplicacao' -Detail $(if ($recoveryValidated) { "sequencia=$($latestApplyReport.Recovery.SequenceNumber)" } else { 'relatorio sem comprovante de recuperacao; execute uma nova aplicacao com a versao atual' })
+    }
+}
+catch { Add-Check -Status 'WARN' -Name 'Relatorio de aplicacao' -Detail $_.Exception.Message }
 
 $featureMap = [ordered]@{
     HyperV = 'Microsoft-Hyper-V-All'
@@ -97,12 +128,13 @@ if ($paths) {
         Add-Check -Status $(if (Test-Path -LiteralPath $paths[$key] -PathType Container) { 'PASS' } else { 'FAIL' }) -Name "Diretorio $key" -Detail $paths[$key]
     }
 
+    $developmentGrants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'Modify' })
+    if ($configuration.Accounts.Codex.Enabled) { $developmentGrants += @{ Name = [string]$configuration.Accounts.Codex.Name; Rights = 'Modify' } }
     $aclExpectations = @(
-        @{ Key = 'Development'; Users = @($configuration.Accounts.DailyUser.Name, $configuration.Accounts.Codex.Name) },
-        @{ Key = 'PersonalData'; Users = @($configuration.Accounts.DailyUser.Name) }
+        @{ Key = 'Development'; Grants = $developmentGrants },
+        @{ Key = 'PersonalData'; Grants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'FullControl' }) }
     )
-    if (-not $configuration.Accounts.Codex.Enabled) { $aclExpectations[0].Users = @($configuration.Accounts.DailyUser.Name) }
-    if ($configuration.Accounts.Codex.Enabled) { $aclExpectations += @{ Key = 'AgentData'; Users = @($configuration.Accounts.Codex.Name) } }
+    if ($configuration.Accounts.Codex.Enabled) { $aclExpectations += @{ Key = 'AgentData'; Grants = @(@{ Name = [string]$configuration.Accounts.Codex.Name; Rights = 'FullControl' }) } }
     foreach ($expectation in $aclExpectations) {
         $path = $paths[$expectation.Key]
         if (-not (Test-Path -LiteralPath $path -PathType Container)) { continue }
@@ -114,14 +146,31 @@ if ($paths) {
             $systemName = ([Security.Principal.SecurityIdentifier]'S-1-5-18').Translate([Security.Principal.NTAccount]).Value
             $administratorsName = ([Security.Principal.SecurityIdentifier]'S-1-5-32-544').Translate([Security.Principal.NTAccount]).Value
             foreach ($builtIn in @($systemName, $administratorsName)) {
-                $fullControl = $null -ne ($allowRules | Where-Object { $_.IdentityReference.Value -eq $builtIn -and ($_.FileSystemRights -band [Security.AccessControl.FileSystemRights]::FullControl) -eq [Security.AccessControl.FileSystemRights]::FullControl } | Select-Object -First 1)
-                Add-Check -Status $(if ($fullControl) { 'PASS' } else { 'FAIL' }) -Name "ACL $($expectation.Key)/$builtIn" -Detail $(if ($fullControl) { 'controle total' } else { 'controle total ausente' })
+                $fullControl = $null -ne ($allowRules | Where-Object {
+                    $_.IdentityReference.Value -eq $builtIn -and
+                    -not $_.IsInherited -and
+                    $_.FileSystemRights -eq [Security.AccessControl.FileSystemRights]::FullControl -and
+                    ($_.InheritanceFlags -band [Security.AccessControl.InheritanceFlags]::ContainerInherit) -ne 0 -and
+                    ($_.InheritanceFlags -band [Security.AccessControl.InheritanceFlags]::ObjectInherit) -ne 0 -and
+                    $_.PropagationFlags -eq [Security.AccessControl.PropagationFlags]::None
+                } | Select-Object -First 1)
+                Add-Check -Status $(if ($fullControl) { 'PASS' } else { 'FAIL' }) -Name "ACL $($expectation.Key)/$builtIn" -Detail $(if ($fullControl) { 'controle total explicito e herdavel' } else { 'regra exata de controle total ausente' })
             }
-            foreach ($name in $expectation.Users) {
-                $present = $null -ne ($identities | Where-Object { $_ -match "\\$([regex]::Escape($name))$" } | Select-Object -First 1)
-                Add-Check -Status $(if ($present) { 'PASS' } else { 'FAIL' }) -Name "ACL $($expectation.Key)/$name" -Detail $(if ($present) { 'regra explicita presente' } else { 'regra esperada ausente' })
+            foreach ($grant in $expectation.Grants) {
+                $name = [string]$grant.Name
+                $expectedRights = [Security.AccessControl.FileSystemRights]$grant.Rights
+                $matchingRules = @($allowRules | Where-Object { $_.IdentityReference.Value -match "\\$([regex]::Escape($name))$" })
+                $validRule = $null -ne ($matchingRules | Where-Object {
+                    -not $_.IsInherited -and
+                    $_.FileSystemRights -eq $expectedRights -and
+                    ($_.InheritanceFlags -band [Security.AccessControl.InheritanceFlags]::ContainerInherit) -ne 0 -and
+                    ($_.InheritanceFlags -band [Security.AccessControl.InheritanceFlags]::ObjectInherit) -ne 0 -and
+                    $_.PropagationFlags -eq [Security.AccessControl.PropagationFlags]::None
+                } | Select-Object -First 1)
+                $detail = if ($validRule) { "$($grant.Rights) explicito e herdavel" } elseif ($matchingRules.Count -gt 0) { "regra presente com direitos ou heranca diferentes de $($grant.Rights)" } else { 'regra esperada ausente' }
+                Add-Check -Status $(if ($validRule) { 'PASS' } else { 'FAIL' }) -Name "ACL $($expectation.Key)/$name" -Detail $detail
             }
-            $expectedIdentityNames = @($systemName, $administratorsName) + @($expectation.Users | ForEach-Object { "$env:COMPUTERNAME\$_" })
+            $expectedIdentityNames = @($systemName, $administratorsName) + @($expectation.Grants | ForEach-Object { "$env:COMPUTERNAME\$($_.Name)" })
             $unexpected = @($identities | Where-Object { $_ -notin $expectedIdentityNames })
             Add-Check -Status $(if ($unexpected.Count -eq 0) { 'PASS' } else { 'FAIL' }) -Name "ACL $($expectation.Key)/identidades" -Detail $(if ($unexpected.Count -eq 0) { 'sem acessos extras' } else { "acessos inesperados: $($unexpected -join ', ')" })
             if ($expectation.Key -eq 'PersonalData' -and $configuration.Accounts.Codex.Enabled) {
@@ -178,6 +227,29 @@ if ($configuration.Features.WSL) {
     if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
         & wsl.exe --status *> $null
         Add-Check -Status $(if ($LASTEXITCODE -eq 0) { 'PASS' } else { 'WARN' }) -Name 'WSL' -Detail "wsl --status retornou $LASTEXITCODE"
+        try {
+            $installedDistributions = @(Get-PcSetupWslDistributionNames)
+            foreach ($environmentDefinition in @(Get-PcSetupWslEnvironments -Configuration $configuration | Where-Object Enabled)) {
+                if ($environmentDefinition.WindowsAccount -ne $env:USERNAME) {
+                    Add-Check -Status 'INFO' -Name "WSL $($environmentDefinition.Name)" -Detail "verifique na sessao Windows de $($environmentDefinition.WindowsAccount) com .\wsl\verify.ps1 -Environment $($environmentDefinition.Name)"
+                    continue
+                }
+                $distribution = [string]$environmentDefinition.Distribution
+                if ($installedDistributions -notcontains $distribution) {
+                    Add-Check -Status 'WARN' -Name "WSL $($environmentDefinition.Name)" -Detail "distribuicao ausente para $env:USERNAME; execute .\wsl\bootstrap.ps1 -Environment $($environmentDefinition.Name) -Apply"
+                    continue
+                }
+                $actualWslVersion = Get-PcSetupWslDistributionVersion -Distribution $distribution
+                Add-Check -Status $(if ($actualWslVersion -eq [int]$configuration.WSL.DefaultVersion) { 'PASS' } else { 'FAIL' }) -Name "WSL $($environmentDefinition.Name)/versao" -Detail "esperada=$($configuration.WSL.DefaultVersion); atual=$actualWslVersion"
+                $wslProfile = Import-PcSetupWslProfile -Configuration $configuration -Environment $environmentDefinition
+                $defaultWslUser = Get-PcSetupWslDefaultUser -Distribution $distribution
+                Add-Check -Status $(if ($defaultWslUser -eq [string]$wslProfile.LinuxUser) { 'PASS' } else { 'FAIL' }) -Name "WSL $($environmentDefinition.Name)/usuario padrao" -Detail "esperado=$($wslProfile.LinuxUser); atual=$defaultWslUser"
+                $verifyLinuxPath = ConvertTo-PcSetupWslPath -Distribution $distribution -WindowsPath (Join-Path $PSScriptRoot 'wsl\linux\verify.sh')
+                $wslVerifyResult = Invoke-PcSetupWslLinuxScript -Distribution $distribution -ScriptPath $verifyLinuxPath -Environment $environmentDefinition -Profile $wslProfile
+                Add-Check -Status $(if ($wslVerifyResult.ExitCode -eq 0) { 'PASS' } else { 'FAIL' }) -Name "WSL $($environmentDefinition.Name)/conteudo" -Detail $(if ($wslVerifyResult.ExitCode -eq 0) { 'usuario, diretorio e pacotes conferidos' } else { "verify Linux retornou $($wslVerifyResult.ExitCode)" })
+            }
+        }
+        catch { Add-Check -Status 'FAIL' -Name 'Ambientes WSL' -Detail $_.Exception.Message }
     }
     else { Add-Check -Status 'FAIL' -Name 'WSL' -Detail 'wsl.exe ausente' }
 }
@@ -187,11 +259,58 @@ if ($configuration.Packages.Enabled) {
         Add-Check -Status 'FAIL' -Name 'Winget' -Detail 'comando ausente'
     }
     else {
-        foreach ($id in @(Get-PcSetupPackageIds -Configuration $configuration)) {
-            & winget.exe list --id $id --exact --disable-interactivity *> $null
-            Add-Check -Status $(if ($LASTEXITCODE -eq 0) { 'PASS' } else { 'FAIL' }) -Name "Pacote $id" -Detail $(if ($LASTEXITCODE -eq 0) { 'instalado' } else { 'nao encontrado' })
+        $packageIds = @(Get-PcSetupPackageIds -Configuration $configuration)
+        $inventoryPath = Get-PcSetupRuntimePath -Configuration $configuration -Key 'WingetInventoryPath'
+        $savedInventory = $null
+        if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
+            Add-Check -Status 'FAIL' -Name 'Inventario Winget' -Detail "arquivo ausente: $inventoryPath"
         }
+        else {
+            try {
+                $savedInventory = Get-Content -LiteralPath $inventoryPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                $inventoryShapeOk = $savedInventory.SchemaVersion -eq '1.0' -and $savedInventory.Packages
+                Add-Check -Status $(if ($inventoryShapeOk) { 'PASS' } else { 'FAIL' }) -Name 'Inventario Winget/formato' -Detail $(if ($inventoryShapeOk) { $inventoryPath } else { 'schema ou lista de pacotes invalida' })
+                Add-Check -Status $(if ($savedInventory.ConfigSha256 -eq $configHash) { 'PASS' } else { 'FAIL' }) -Name 'Inventario Winget/configuracao' -Detail $(if ($savedInventory.ConfigSha256 -eq $configHash) { $configHash } else { 'inventario pertence a outra configuracao' })
+                Add-Check -Status $(if ($savedInventory.ProjectSha256 -eq $projectHash) { 'PASS' } else { 'WARN' }) -Name 'Inventario Winget/projeto' -Detail $(if ($savedInventory.ProjectSha256 -eq $projectHash) { $projectHash } else { 'o projeto mudou depois da captura' })
+            }
+            catch { Add-Check -Status 'FAIL' -Name 'Inventario Winget' -Detail $_.Exception.Message }
+        }
+        try {
+            $liveInventory = Get-PcSetupWingetInstalledInventory -PackageIds $packageIds -ConfigSha256 $configHash -ProjectSha256 $projectHash -RequireAll
+            foreach ($id in $packageIds) {
+                $livePackage = $liveInventory.Packages | Where-Object PackageId -eq $id | Select-Object -First 1
+                $savedPackage = if ($savedInventory) { $savedInventory.Packages | Where-Object PackageId -eq $id | Select-Object -First 1 } else { $null }
+                if (-not $livePackage -or -not $livePackage.Found) {
+                    Add-Check -Status 'FAIL' -Name "Pacote $id" -Detail 'nao encontrado no Winget'
+                    continue
+                }
+                if ($savedPackage -and $savedPackage.Found -and $savedPackage.Version -ne $livePackage.Version) {
+                    Add-Check -Status 'WARN' -Name "Pacote $id" -Detail "instalado=$($livePackage.Version); registrado no Apply=$($savedPackage.Version)"
+                }
+                else {
+                    Add-Check -Status 'PASS' -Name "Pacote $id" -Detail "versao instalada=$($livePackage.Version)"
+                }
+            }
+        }
+        catch { Add-Check -Status 'FAIL' -Name 'Pacotes Winget' -Detail $_.Exception.Message }
     }
+}
+
+if ($configuration.Personalization.Enabled) {
+    try {
+        $wallpaperSource = Resolve-PcSetupProjectPath -Configuration $configuration -Value ([string]$configuration.Personalization.WallpaperPath) -SettingName 'Personalization.WallpaperPath'
+        $stateRoot = Get-PcSetupRuntimePath -Configuration $configuration -Key 'StateDirectory' -SystemRoot $(if ($storage) { $storage.SystemRoot } else { $null })
+        $wallpaperTarget = Join-Path (Join-Path $stateRoot 'assets') ('wallpaper' + [IO.Path]::GetExtension($wallpaperSource))
+        $wallpaperFilesExist = (Test-Path -LiteralPath $wallpaperSource -PathType Leaf) -and (Test-Path -LiteralPath $wallpaperTarget -PathType Leaf)
+        $wallpaperFilesMatch = $wallpaperFilesExist -and ((Get-FileHash -LiteralPath $wallpaperSource -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $wallpaperTarget -Algorithm SHA256).Hash)
+        Add-Check -Status $(if ($wallpaperFilesMatch) { 'PASS' } else { 'FAIL' }) -Name 'Plano de fundo/arquivo' -Detail $(if ($wallpaperFilesMatch) { $wallpaperTarget } else { 'origem e copia aplicada estao ausentes ou diferentes' })
+        $configuredWallpaper = [string](Get-ItemProperty -LiteralPath 'HKCU:\Control Panel\Desktop' -Name Wallpaper -ErrorAction Stop).Wallpaper
+        Add-Check -Status $(if ($configuredWallpaper -eq $wallpaperTarget) { 'PASS' } else { 'FAIL' }) -Name 'Plano de fundo/usuario atual' -Detail "esperado=$wallpaperTarget; atual=$configuredWallpaper"
+    }
+    catch { Add-Check -Status 'FAIL' -Name 'Personalizacao' -Detail $_.Exception.Message }
+}
+else {
+    Add-Check -Status 'INFO' -Name 'Personalizacao' -Detail 'nao solicitada pela configuracao'
 }
 
 try {

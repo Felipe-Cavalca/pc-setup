@@ -21,8 +21,8 @@ Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-
 - aplica ACLs isolando dados pessoais e dados do agente, com backup e rollback;
 - habilita Hyper-V, Windows Sandbox, Virtual Machine Platform e WSL;
 - instala Chrome, Bitwarden, WinRAR, Google Drive, ferramentas de desenvolvimento e launchers de jogos pelo Winget;
-- atualiza e configura WSL 2, sem impor uma distribuição;
-- gera relatórios JSON de plano, aplicação e validação;
+- atualiza o WSL 2 e prepara ambientes Ubuntu separados para o usuário diário e o Codex;
+- gera relatórios JSON de plano, aplicação, versões instaladas pelo Winget e validação;
 - apenas informa o estado do BitLocker, sem configurá-lo.
 
 As contas e a VM opcionais, o plano de fundo e o debloat ficam desabilitados por padrão.
@@ -158,6 +158,14 @@ Os perfis ficam em [`config/packages`](config/packages):
 
 O Winget consulta a fonte oficial configurada no Windows e tenta instalar a versão atual. Em caso de falha, um instalador offline só é aceito quando consta em [`config/offline-installers.psd1`](config/offline-installers.psd1), existe dentro da pasta permitida e tem SHA-256 idêntico ao manifesto. O manifesto vem vazio; adicione apenas arquivos revisados.
 
+Ao final da etapa, as versões realmente encontradas pelo `winget export --include-versions` são registradas em `%ProgramData%\pc-setup\winget-installed.json` e arquivadas junto aos relatórios. O `verify.ps1` compara esse registro com o estado atual.
+
+## WSL por usuário
+
+O bootstrap principal configura os recursos globais do WSL. A distribuição precisa ser aplicada depois dentro de cada conta Windows, mantendo os ambientes do usuário diário e do Codex separados.
+
+Os comandos, perfis reproduzíveis e a decisão entre `/mnt/d/Dev` e o filesystem Linux estão em [`wsl/README.md`](wsl/README.md).
+
 ## Criar um perfil de máquina
 
 Use `config/machine.psd1` como referência e altere, principalmente:
@@ -167,7 +175,7 @@ Use `config/machine.psd1` como referência e altere, principalmente:
 - política do segundo disco;
 - recursos opcionais;
 - perfis de programas;
-- distribuição WSL, se desejar uma instalação automática.
+- ambientes WSL por conta e os respectivos perfis Linux.
 
 Exemplo:
 
@@ -184,7 +192,7 @@ O Windows limita `Checkpoint-Computer` a um ponto por período de 24 horas. Por 
 
 Executar um script de alteração diretamente com `-Apply` exige um novo ponto. `-Plan`, `verify.ps1`, testes e o lançador da VM não alteram a configuração do Windows e não criam ponto.
 
-Relatórios e estado ficam em `%ProgramData%\pc-setup`. Um ponto de restauração protege configurações e arquivos de sistema, mas não substitui backup dos arquivos pessoais.
+Relatórios e estado do Windows ficam em `%ProgramData%\pc-setup`. Relatórios dos ambientes WSL ficam em `%LOCALAPPDATA%\pc-setup\reports` de cada conta. Um ponto de restauração protege configurações e arquivos de sistema, mas não substitui backup dos arquivos pessoais.
 
 ## Etapas opcionais
 
@@ -205,9 +213,10 @@ As contas opcionais permanecem desabilitadas no perfil versionado. A criação d
 Os testes não alteram o Windows nem criam ponto real:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\run.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\image.tests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\run-all.ps1
 ```
+
+A CI executa a mesma suíte em Windows PowerShell 5.1, valida a sintaxe dos scripts e PSD1 com o parser do PowerShell, roda o PSScriptAnalyzer e verifica a sintaxe Bash dos scripts WSL.
 
 ## Referências
 
@@ -215,4 +224,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\image.tests.ps1
 - [System Protection](https://support.microsoft.com/en-us/windows/experience/backup-recovery/system-protection)
 - [Checkpoint-Computer](https://learn.microsoft.com/pt-br/powershell/module/microsoft.powershell.management/checkpoint-computer?view=powershell-5.1)
 - [Windows 11 release information](https://learn.microsoft.com/windows/release-health/windows11-release-information)
+- [Arquivos entre Windows e WSL](https://learn.microsoft.com/windows/wsl/filesystems)
+- [Winget export](https://learn.microsoft.com/windows/package-manager/winget/export)
 - [Win11Debloat](https://github.com/Raphire/Win11Debloat)

@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  powershell:
+    name: PowerShell 5.1
+    runs-on: windows-latest
+    steps:
+      - name: Baixar o repositorio
+        uses: actions/checkout@v6
+
+      - name: Validar PowerShell e PSD1
+        shell: powershell
+        run: .\ci\validate.ps1
+
+      - name: Instalar PSScriptAnalyzer no runner
+        shell: powershell
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+
+      - name: Analisar PowerShell
+        shell: powershell
+        run: |
+          $results = @(Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error)
+          $results | Format-Table -AutoSize
+          if ($results.Count -gt 0) { throw "PSScriptAnalyzer encontrou $($results.Count) erro(s)." }
+
+      - name: Executar testes
+        shell: powershell
+        run: .\tests\run-all.ps1
+
+  linux:
+    name: Scripts WSL
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o repositorio
+        uses: actions/checkout@v6
+
+      - name: Validar sintaxe Bash
+        run: |
+          bash -n wsl/linux/bootstrap.sh
+          bash -n wsl/linux/verify.sh
