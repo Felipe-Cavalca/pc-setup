@@ -5,7 +5,6 @@
 *.pem
 *.env
 secrets/
-recovery-keys/
 
 # Temporarios
 .tmp/
