@@ -1,0 +1,12 @@
+# Nunca versionar segredos
+*.key
+*.pfx
+*.p12
+*.pem
+*.env
+secrets/
+
+# Temporarios
+.tmp/
+tmp/
+*.log
