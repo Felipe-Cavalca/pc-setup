@@ -1,20 +1,23 @@
 # pc-setup
 
-Setup reproduzível e configurável para Windows 11 Pro. O perfil padrão representa a máquina do Felipe; outro computador usa o mesmo código e troca apenas o arquivo `.psd1`.
+Automação reproduzível e configurável de pós-instalação para Windows 11 Pro.
 
 O projeto trabalha em duas etapas: primeiro mostra e registra tudo o que pretende fazer; depois aplica exatamente a configuração revisada. Senhas, tokens e chaves nunca ficam no repositório.
 
 Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-windows/README.md`](imagem-windows/README.md). A mídia fica responsável apenas por instalar o Windows; aplicativos, recursos opcionais, usuários e personalização são tratados depois pelo `pc-setup`.
 
-## Resultado do perfil padrão
+> [!IMPORTANT]
+> `config/machine.psd1` é um perfil versionado de referência, não uma configuração universal. Revise usuários, armazenamento, recursos e pacotes antes de executar `INSTALAR.cmd`.
+
+## Comportamento do perfil versionado
 
 - valida Windows 11 Pro 25H2 e build mínima 26200;
 - usa o volume do Windows detectado em tempo de execução;
 - usa automaticamente um único segundo disco fixo com volume NTFS saudável, quando houver;
 - sem segundo disco, cria `Dados` no volume do Windows;
 - cria a estrutura de dados configurada;
-- cria `Admin` como administrador e `Codex` como usuário padrão;
-- preserva `Felipe` como administrador até o login de `Admin` ser testado;
+- cria as contas habilitadas no arquivo de configuração;
+- preserva o usuário diário como administrador até a conta de recuperação ser testada;
 - aplica ACLs isolando dados pessoais e dados do agente, com backup e rollback;
 - habilita Hyper-V, Windows Sandbox, Virtual Machine Platform e WSL;
 - instala Chrome, Bitwarden, WinRAR, Google Drive, ferramentas de desenvolvimento e launchers de jogos pelo Winget;
@@ -22,15 +25,15 @@ Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-
 - gera relatórios JSON de plano, aplicação e validação;
 - apenas informa o estado do BitLocker, sem configurá-lo.
 
-As contas `God` e `Publico`, a VM pública, o plano de fundo e o debloat ficam desabilitados por padrão.
+As contas e a VM opcionais, o plano de fundo e o debloat ficam desabilitados por padrão.
 
-## Antes de executar
+## Pré-requisitos
 
 1. Termine o Windows Update e instale os drivers.
 2. Habilite manualmente a Proteção do Sistema no volume do Windows.
 3. Confirme que o Windows está ativado.
-4. Abra o **Windows PowerShell 5.1 como Administrador**.
-5. Revise [`config/machine.psd1`](config/machine.psd1).
+4. Revise [`config/machine.psd1`](config/machine.psd1).
+5. Confirme no arquivo os nomes das contas, a política de armazenamento, os recursos opcionais e os pacotes.
 
 O setup não habilita a Proteção do Sistema sozinho. Se não conseguir criar e consultar o ponto de restauração obrigatório, nenhuma etapa de aplicação começa.
 
@@ -50,7 +53,7 @@ Se for necessário reiniciar, reinicie o Windows e clique no mesmo arquivo novam
 
 ### Execução manual
 
-Na pasta do projeto:
+Abra o **Windows PowerShell 5.1 como Administrador** na pasta do projeto:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -77,9 +80,9 @@ Ao terminar:
 
 O verificador classifica cada item como `PASS`, `WARN`, `FAIL` ou `INFO`. Avisos exigem revisão; falhas fazem o comando retornar código 1.
 
-## O que aparece durante a execução
+## Saída da execução
 
-No plano, você verá:
+O plano apresenta:
 
 - perfil e arquivo de configuração usados;
 - volume atual do Windows e raiz escolhida para dados;
@@ -137,6 +140,8 @@ As ACLs protegidas são:
 - dados pessoais: somente usuário principal, SYSTEM e Administradores;
 - dados do agente: somente `Codex`, SYSTEM e Administradores.
 
+Os nomes das contas são configuráveis. Consulte os papéis e limites de cada conta em [`usuarios/README.md`](usuarios/README.md).
+
 Antes da alteração, o script exporta as ACLs para `%ProgramData%\pc-setup\acl-backups`. Se uma aplicação falhar, ele tenta restaurar todos os backups daquela execução.
 
 Perfis do Windows, `AppData`, `ProgramData` e componentes do sistema não são movidos.
@@ -153,9 +158,9 @@ Os perfis ficam em [`config/packages`](config/packages):
 
 O Winget consulta a fonte oficial configurada no Windows e tenta instalar a versão atual. Em caso de falha, um instalador offline só é aceito quando consta em [`config/offline-installers.psd1`](config/offline-installers.psd1), existe dentro da pasta permitida e tem SHA-256 idêntico ao manifesto. O manifesto vem vazio; adicione apenas arquivos revisados.
 
-## Configuração para outra pessoa
+## Criar um perfil de máquina
 
-Copie `config/machine.psd1` e altere, principalmente:
+Use `config/machine.psd1` como referência e altere, principalmente:
 
 - `Machine.PrimaryUser`;
 - nomes, funções e `Enabled` das contas;
@@ -167,8 +172,8 @@ Copie `config/machine.psd1` e altere, principalmente:
 Exemplo:
 
 ```powershell
-.\bootstrap.ps1 -Config .\config\minha-maquina.psd1 -Plan
-.\bootstrap.ps1 -Config .\config\minha-maquina.psd1 -Apply
+.\bootstrap.ps1 -Config .\config\exemplo-maquina.psd1 -Plan
+.\bootstrap.ps1 -Config .\config\exemplo-maquina.psd1 -Apply
 ```
 
 Veja todas as decisões em [`config/README.md`](config/README.md).
@@ -185,15 +190,15 @@ Relatórios e estado ficam em `%ProgramData%\pc-setup`. Um ponto de restauraçã
 
 ### Plano de fundo
 
-Coloque uma imagem dentro do projeto, configure `Personalization.WallpaperPath` e mude `Enabled` para `$true`. A alteração é aplicada ao usuário que executa o bootstrap.
+Uma imagem local pode ser adicionada ao projeto e indicada em `Personalization.WallpaperPath`. A alteração é aplicada ao usuário que executa o bootstrap quando `Enabled = $true`.
 
 ### Debloat
 
 O debloat não faz parte do bootstrap de aplicação. Ele permanece desabilitado e exige versão fixa, SHA-256 válido, leitura da documentação e confirmação explícita. Veja [`docs/DEBLOAT.md`](docs/DEBLOAT.md).
 
-### VM pública e conta God
+### Contas e VM opcionais
 
-Essas contas não são criadas pelo perfil padrão. A criação da VM ainda é uma decisão manual; o projeto inclui apenas um lançador configurável para uma VM que já exista.
+As contas opcionais permanecem desabilitadas no perfil versionado. A criação da VM é uma etapa manual; o projeto inclui apenas um lançador configurável para uma VM que já exista.
 
 ## Testes do projeto
 
@@ -201,6 +206,7 @@ Os testes não alteram o Windows nem criam ponto real:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\run.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\image.tests.ps1
 ```
 
 ## Referências

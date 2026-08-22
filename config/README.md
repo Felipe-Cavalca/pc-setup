@@ -1,8 +1,13 @@
 # Configuração
 
-`machine.psd1` guarda decisões não secretas. Use outro `.psd1` para outra máquina; os scripts não dependem de letra, modelo ou tamanho fixo de disco.
+`machine.psd1` guarda decisões não secretas e funciona como perfil versionado de referência. Ele não deve ser executado sem revisão. Os scripts não dependem de letra, modelo ou tamanho fixo de disco.
 
 Nunca coloque no arquivo senhas, tokens, chaves de produto, certificados ou chaves de recuperação.
+
+`INSTALAR.cmd` sempre carrega `config\machine.psd1`. Um perfil diferente pode ser usado de duas formas:
+
+- revisar e substituir o conteúdo de `machine.psd1` em um fork próprio;
+- executar manualmente `bootstrap.ps1 -Config <arquivo>` para selecionar outro `.psd1`.
 
 ## Execução
 
@@ -34,7 +39,9 @@ Use [`examples/machine-one-disk.psd1`](examples/machine-one-disk.psd1) como pont
 
 Cada entrada possui `Enabled`, `Name` e `Role`. Funções válidas: `Standard` e `Administrator`.
 
-`Security.DemoteDailyUserAutomatically = $false` evita perder acesso administrativo antes do teste da conta de recuperação. Depois de testar `Admin`, rebaixe manualmente o usuário diário.
+`Security.DemoteDailyUserAutomatically = $false` evita perder acesso administrativo antes do teste da conta de recuperação. O usuário diário só deve ser rebaixado depois que a conta administrativa configurada for validada.
+
+Os papéis recomendados e seus limites estão documentados em [`../usuarios/README.md`](../usuarios/README.md). Os nomes presentes no perfil versionado são exemplos configuráveis, não requisitos do projeto.
 
 ## Pacotes
 

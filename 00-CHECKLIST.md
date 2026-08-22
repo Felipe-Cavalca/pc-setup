@@ -4,7 +4,9 @@
 
 - [ ] Seguir [`imagem-windows/README.md`](imagem-windows/README.md).
 - [ ] Usar uma mídia oficial do Windows sem alterar `boot.wim` ou `install.wim`.
-- [ ] Remover da raiz da mídia o `autounattend.xml` antigo e a pasta `Installers` antiga.
+- [ ] Manter `autounattend.xml` ausente ou usar somente o modelo opcional fornecido pelo projeto.
+- [ ] Confirmar que não existe uma pasta `Installers` na mídia.
+- [ ] Copiar `Validar-Midia.cmd` e `Validar-Midia.ps1` para a raiz da mídia.
 - [ ] Executar `Validar-Midia.cmd` na mídia antes de iniciar a instalação.
 - [ ] Manter as telas de escolha de edição, disco, partição e conta.
 
@@ -36,7 +38,7 @@
 - [ ] Informar senhas somente no prompt seguro.
 - [ ] Se solicitado, reiniciar e executar o mesmo comando `-Apply`.
 - [ ] Confirmar que a aplicação terminou com relatório `Completed`.
-- [ ] Testar o login de `Admin` antes de rebaixar manualmente o usuário diário.
+- [ ] Testar o login da conta de recuperação antes de rebaixar manualmente o usuário diário.
 
 ## Validação
 

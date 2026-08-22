@@ -1,8 +1,8 @@
 # Teste em máquina virtual
 
-Não é necessário criar uma VM para executar o `pc-setup` no computador real.
+A VM não é requisito para executar o `pc-setup` em hardware físico.
 
-Uma VM Hyper-V é útil apenas para ensaiar a instalação completa sem tocar nos discos físicos. Use um disco virtual descartável e um checkpoint antes do teste.
+Uma VM Hyper-V é útil para ensaiar a instalação completa sem tocar nos discos físicos. O ambiente de teste deve usar um disco virtual descartável e um checkpoint anterior à execução.
 
 ## O que testar
 
@@ -13,9 +13,9 @@ Uma VM Hyper-V é útil apenas para ensaiar a instalação completa sem tocar no
 5. copiar o repositório para a VM;
 6. revisar uma configuração específica para a VM;
 7. executar primeiro o plano;
-8. aplicar somente se quiser validar também recursos, programas e reinício.
+8. aplicar somente quando o objetivo incluir recursos, programas e retomada após reinício.
 
-Para testar Hyper-V ou WSL dentro da VM, o host precisa expor extensões de virtualização aninhada. Isso é uma preparação opcional do laboratório, não um requisito do computador real.
+Para testar Hyper-V ou WSL dentro da VM, o host precisa expor extensões de virtualização aninhada. Essa preparação pertence ao laboratório e não é requisito do uso em hardware físico.
 
 ## Por que não usar Windows Sandbox
 
