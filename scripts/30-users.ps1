@@ -1,5 +1,7 @@
 #requires -RunAsAdministrator
 
+$adminGroup = ([System.Security.Principal.SecurityIdentifier]'S-1-5-32-544').Translate([System.Security.Principal.NTAccount]).Value.Split('\')[-1]
+
 function Ensure-User([string]$Name, [bool]$Administrator) {
     $user = Get-LocalUser -Name $Name -ErrorAction SilentlyContinue
     if (-not $user) {
@@ -10,11 +12,12 @@ function Ensure-User([string]$Name, [bool]$Administrator) {
         Write-Host "[OK] Usuario $Name ja existe"
     }
 
-    if ($Administrator) {
-        $member = Get-LocalGroupMember -Group 'Administrators' -ErrorAction SilentlyContinue | Where-Object Name -Match "\\$([regex]::Escape($Name))$"
-        if (-not $member) { Add-LocalGroupMember -Group 'Administrators' -Member $Name }
-    } else {
-        Remove-LocalGroupMember -Group 'Administrators' -Member $Name -ErrorAction SilentlyContinue
+    $member = Get-LocalGroupMember -Group $adminGroup -ErrorAction SilentlyContinue | Where-Object Name -Match "\\$([regex]::Escape($Name))$"
+    if ($Administrator -and -not $member) {
+        Add-LocalGroupMember -Group $adminGroup -Member $Name
+    }
+    if ((-not $Administrator) -and $member) {
+        Remove-LocalGroupMember -Group $adminGroup -Member $Name
     }
 }
 
@@ -23,4 +26,4 @@ Ensure-User 'Codex' $false
 Ensure-User 'God' $true
 Ensure-User 'Publico' $false
 
-Write-Warning 'Este script NAO remove Felipe de Administrators. Entre e teste Admin primeiro; so depois rebaixe Felipe manualmente para Standard.'
+Write-Warning 'Este script NAO remove Felipe do grupo administrativo. Entre e teste Admin primeiro; so depois rebaixe Felipe manualmente para Standard.'

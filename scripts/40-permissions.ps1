@@ -5,7 +5,8 @@ $computer = $env:COMPUTERNAME
 
 function Reset-Acl([string]$Path, [string[]]$Grants) {
     & icacls $Path /inheritance:r | Out-Null
-    & icacls $Path /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
+    # S-1-5-18 = SYSTEM; S-1-5-32-544 = grupo local Administrators/Administradores.
+    & icacls $Path /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
     foreach ($grant in $Grants) { & icacls $Path /grant $grant | Out-Null }
 }
 

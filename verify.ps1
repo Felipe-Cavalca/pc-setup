@@ -17,6 +17,9 @@ foreach ($feature in @('Microsoft-Hyper-V-All','Containers-DisposableClientVM','
     Result ($f.State -eq 'Enabled') "$feature habilitado"
 }
 
+$adminGroup = ([System.Security.Principal.SecurityIdentifier]'S-1-5-32-544').Translate([System.Security.Principal.NTAccount]).Value.Split('\')[-1]
+$adminMembers = Get-LocalGroupMember -Group $adminGroup -ErrorAction SilentlyContinue
+
 $expectedUsers = @{
     'Admin'='Administrator'
     'Codex'='Standard'
@@ -28,7 +31,7 @@ foreach ($name in $expectedUsers.Keys) {
     $u = Get-LocalUser -Name $name -ErrorAction SilentlyContinue
     Result ($null -ne $u) "Usuario $name existe"
     if ($u) {
-        $isAdmin = $null -ne (Get-LocalGroupMember -Group 'Administrators' -ErrorAction SilentlyContinue | Where-Object Name -Match "\\$([regex]::Escape($name))$")
+        $isAdmin = $null -ne ($adminMembers | Where-Object Name -Match "\\$([regex]::Escape($name))$")
         if ($expectedUsers[$name] -eq 'Administrator') { Result $isAdmin "$name e administrador" }
         else { Result (-not $isAdmin) "$name nao e administrador" }
     }
