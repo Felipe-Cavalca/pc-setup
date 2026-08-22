@@ -12,6 +12,12 @@ Write-Host '=== pc-setup verify ===' -ForegroundColor Cyan
 $edition = (Get-ComputerInfo -Property WindowsProductName).WindowsProductName
 Result ($edition -match 'Pro') "Windows Pro ($edition)"
 
+$windows = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+$displayVersion = $windows.DisplayVersion
+$currentBuild = [int]$windows.CurrentBuildNumber
+Result ($displayVersion -eq '25H2') "Windows target 25H2 (detectado: $displayVersion)"
+Result ($currentBuild -ge 26200) "Build Windows >= 26200 (detectado: $currentBuild)"
+
 foreach ($feature in @('Microsoft-Hyper-V-All','Containers-DisposableClientVM','VirtualMachinePlatform','Microsoft-Windows-Subsystem-Linux')) {
     $f = Get-WindowsOptionalFeature -Online -FeatureName $feature -ErrorAction SilentlyContinue
     Result ($f.State -eq 'Enabled') "$feature habilitado"
