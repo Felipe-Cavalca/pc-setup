@@ -69,7 +69,7 @@ Depois de chegar à Área de Trabalho:
 6. executar `INSTALAR.cmd` e aceitar o UAC;
 7. conferir o plano e confirmar somente se disco, usuários, recursos e programas estiverem corretos.
 
-Se o script solicitar reinício, reinicie e clique em `INSTALAR.cmd` novamente. Ele retoma a aplicação e executa a validação final. Os detalhes estão em [`pos-instalacao/README.md`](pos-instalacao/README.md).
+Se o script solicitar reinício, reinicie e clique em `INSTALAR.cmd` novamente. Ele retoma a aplicação e executa a validação final. Os detalhes de execução, retomada e relatórios estão no [`README.md` principal](../README.md).
 
 ## Configuração por máquina
 

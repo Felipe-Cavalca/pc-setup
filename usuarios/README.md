@@ -10,12 +10,6 @@ As contas do Windows são definidas em `config\machine.psd1`. Nomes podem ser al
 | Agente administrativo | `Accounts.God` | Administrator | Automação administrativa excepcional |
 | Usuário público | `Accounts.Public` | Standard | Acesso restrito a uma VM dedicada |
 
-Documentação de cada papel:
-
-- [`README-USUARIO-DIARIO.md`](README-USUARIO-DIARIO.md);
-- [`README-ADMIN-RECUPERACAO.md`](README-ADMIN-RECUPERACAO.md);
-- [`README-AGENTE-STANDARD.md`](README-AGENTE-STANDARD.md);
-- [`README-AGENTE-ADMIN.md`](README-AGENTE-ADMIN.md);
-- [`README-USUARIO-PUBLICO.md`](README-USUARIO-PUBLICO.md).
-
 Contas opcionais permanecem desabilitadas até serem habilitadas explicitamente no perfil. Senhas são solicitadas em prompt seguro e não devem ser armazenadas no Git.
+
+O usuário diário só deve perder privilégios administrativos depois que a conta de recuperação for testada. Contas de agentes não devem acessar dados pessoais ou credenciais do usuário principal. A conta pública deve permanecer isolada dos dados do host e servir apenas como entrada para uma VM dedicada.
