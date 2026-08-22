@@ -19,11 +19,14 @@
 
 ## Windows
 
-- [ ] Windows 11 Pro instalado no C (NVMe).
+- [ ] Instalar **Windows 11 Pro 25H2** no C (NVMe).
+- [ ] Confirmar build `26200` ou posterior.
 - [ ] Windows Update completo.
 - [ ] Drivers instalados.
 - [ ] Windows ativado.
 - [ ] D em NTFS.
+
+> Nao forcar Windows 11 26H1 nesta maquina existente: essa release e destinada a novos dispositivos de 2026 e nao e oferecida como feature update para PCs 24H2/25H2 existentes.
 
 ## Setup
 
@@ -32,7 +35,11 @@
 - [ ] Rodar bootstrap como administrador.
 - [ ] Reiniciar se necessario.
 - [ ] Testar login do Admin antes de remover privilegio administrativo do Felipe.
-- [ ] Aplicar debloat compativel.
+- [ ] Ler `docs/DEBLOAT.md`.
+- [ ] Rodar `scripts/50-debloat-akita.ps1`.
+- [ ] Reiniciar depois do debloat.
+- [ ] Testar Microsoft Store, Device Manager e Windows Update.
+- [ ] Testar Xbox/Gaming se aplicavel.
 - [ ] Configurar Codex.
 - [ ] Configurar God.
 - [ ] Configurar WSL2.
