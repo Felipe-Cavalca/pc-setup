@@ -19,4 +19,9 @@ Assert-True (-not $config.Debloat.Enabled) 'Debloat deve permanecer separado e d
 Assert-True (-not $config.Accounts.God.Enabled) 'Conta God deve permanecer desabilitada por padrao.'
 Assert-True (-not $config.Accounts.Public.Enabled) 'Conta Publico deve permanecer desabilitada por padrao.'
 
+$launcher = Get-Content -Raw -LiteralPath (Join-Path $root 'INSTALAR.cmd')
+Assert-True ($launcher -match 'Start-PcSetup\.ps1') 'O launcher deve chamar o fluxo assistido.'
+$assistedScript = Get-Content -Raw -LiteralPath (Join-Path $root 'scripts\Start-PcSetup.ps1')
+Assert-True ($assistedScript -match 'bootstrap\.ps1' -and $assistedScript -match 'verify\.ps1') 'O fluxo assistido deve executar plano, aplicacao e verificacao.'
+
 Write-Host 'PASS: sintaxe e invariantes de seguranca.' -ForegroundColor Green

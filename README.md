@@ -4,6 +4,8 @@ Setup reproduzível e configurável para Windows 11 Pro. O perfil padrão repres
 
 O projeto trabalha em duas etapas: primeiro mostra e registra tudo o que pretende fazer; depois aplica exatamente a configuração revisada. Senhas, tokens e chaves nunca ficam no repositório.
 
+Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-windows/README.md`](imagem-windows/README.md). A mídia fica responsável apenas por instalar o Windows; aplicativos, recursos opcionais, usuários e personalização são tratados depois pelo `pc-setup`.
+
 ## Resultado do perfil padrão
 
 - valida Windows 11 Pro 25H2 e build mínima 26200;
@@ -33,6 +35,20 @@ As contas `God` e `Publico`, a VM pública, o plano de fundo e o debloat ficam d
 O setup não habilita a Proteção do Sistema sozinho. Se não conseguir criar e consultar o ponto de restauração obrigatório, nenhuma etapa de aplicação começa.
 
 ## Executar
+
+A forma mais simples é dar duplo clique em `INSTALAR.cmd`.
+
+O arquivo:
+
+1. solicita permissão de Administrador;
+2. mostra o plano e o disco escolhido;
+3. pede `S` para confirmar;
+4. aplica a configuração;
+5. executa a validação final.
+
+Se for necessário reiniciar, reinicie o Windows e clique no mesmo arquivo novamente. A aplicação será retomada do ponto salvo. Senhas de contas novas ainda são solicitadas em prompt seguro.
+
+### Execução manual
 
 Na pasta do projeto:
 

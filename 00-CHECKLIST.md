@@ -1,5 +1,13 @@
 # Checklist de instalação
 
+## Mídia do Windows
+
+- [ ] Seguir [`imagem-windows/README.md`](imagem-windows/README.md).
+- [ ] Usar uma mídia oficial do Windows sem alterar `boot.wim` ou `install.wim`.
+- [ ] Remover da raiz da mídia o `autounattend.xml` antigo e a pasta `Installers` antiga.
+- [ ] Executar `Validar-Midia.cmd` na mídia antes de iniciar a instalação.
+- [ ] Manter as telas de escolha de edição, disco, partição e conta.
+
 ## Preparação manual
 
 - [ ] Windows 11 Pro instalado e ativado.
@@ -13,6 +21,8 @@
 
 ## Plano
 
+- [ ] Para o fluxo simples, dar duplo clique em `INSTALAR.cmd`, aceitar o UAC e conferir o plano mostrado.
+- [ ] Se preferir executar manualmente, seguir os comandos abaixo.
 - [ ] Abrir Windows PowerShell 5.1 como Administrador.
 - [ ] Executar `Set-ExecutionPolicy -Scope Process Bypass`.
 - [ ] Executar `.\bootstrap.ps1 -Config .\config\machine.psd1 -Plan`.
