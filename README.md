@@ -1,13 +1,15 @@
 # pc-setup
 
-Setup reproduzivel do meu PC pessoal com **Windows 11 Pro**.
+Setup reproduzivel do meu PC pessoal com **Windows 11 Pro 25H2**.
 
 A ideia nao e preservar uma instalacao para sempre. A ideia e conseguir apagar o PC e reconstruir um ambiente conhecido, documentado e verificavel.
+
+> Em agosto de 2026, o Windows 11 26H1 existe, mas a Microsoft o destina a novos dispositivos de 2026 e nao o oferece como feature update para PCs existentes em 24H2/25H2. Para esta maquina, o target correto e Windows 11 Pro 25H2.
 
 ## Arquitetura
 
 ```text
-Windows 11 Pro
+Windows 11 Pro 25H2
 ├── Felipe   -> usuario padrao, uso diario
 ├── Admin    -> administrador humano / recuperacao
 ├── Codex    -> usuario padrao exclusivo do agente
@@ -62,23 +64,29 @@ Depois:
 
 ## Debloat
 
-O Fabio Akita citou o **Win10 Smart Debloat / Win-Debloat-Tools, do LeDragoX**, no Akitando #114.
+O Fabio Akita citou o projeto de debloat do LeDragoX no Akitando #114. Aquele projeto foi arquivado em 2025 e nao e mais a base usada aqui.
 
-Este projeto foi arquivado em **2025-10-03**. Por isso este repo nao executa uma URL flutuante: `scripts/50-debloat-akita.ps1` baixa o commit final fixo:
+Para Windows 11 Pro 25H2, este setup usa o **Raphire/Win11Debloat**, atualmente mantido, fixado na release:
 
 ```text
-4766a980ce25a5d130f7c8e801550afab876cd34
+2026.07.11
 ```
 
-O projeto arquivado declara suporte ate Windows 11 **24H2 ou anterior**. Em versao mais nova, o script aborta por padrao.
+Nao executamos uma URL remota flutuante. O wrapper baixa a release fixa e roda automaticamente:
 
-Execute explicitamente:
+```powershell
+Win11Debloat.ps1 -RunDefaults -Silent -CreateRestorePoint
+```
+
+Execute explicitamente depois de Windows Update e drivers:
 
 ```powershell
 .\scripts\50-debloat-akita.ps1
 ```
 
-Veja `docs/DEBLOAT.md`.
+O preset nao usa `-RemoveGamingApps`, porque este PC tambem sera usado para jogos.
+
+Veja `docs/DEBLOAT.md` antes de executar.
 
 ## Principios
 
@@ -90,27 +98,30 @@ Veja `docs/DEBLOAT.md`.
 - restore precisa ser testado;
 - segredos nunca entram neste repositorio;
 - `God` e break-glass, nao fluxo normal;
-- software desconhecido vai para Sandbox/VM antes do host.
+- software desconhecido vai para Sandbox/VM antes do host;
+- automacao deve ser versionada e previsivel, nao depender do estado atual de uma URL externa.
 
 ## Ordem recomendada
 
 1. Backup e recovery keys.
 2. Verificar a causa da desconexao do SSD D.
-3. Instalar Windows 11 Pro no NVMe.
+3. Instalar Windows 11 Pro **25H2** no NVMe.
 4. Windows Update + drivers.
 5. Clonar este repositorio.
 6. Rodar `bootstrap.ps1`.
 7. Reiniciar quando solicitado.
 8. Configurar usuarios e testar Admin.
-9. Aplicar debloat somente depois de conferir compatibilidade.
-10. Configurar WSL/Hyper-V/VM Publico.
-11. Rodar `verify.ps1`.
-12. Criar uma imagem/backup do estado limpo.
+9. Rodar `scripts/50-debloat-akita.ps1`.
+10. Reiniciar e validar Store/jogos/dispositivos.
+11. Configurar WSL/Hyper-V/VM Publico.
+12. Rodar `verify.ps1`.
+13. Criar uma imagem/backup do estado limpo.
 
 ## Referencias
 
 - Akita Akitando #114: https://akitaonrails.com/2022/02/15/akitando-114-o-melhor-setup-dev-com-arch-e-wsl2/
-- LeDragoX Win-Debloat-Tools: https://github.com/LeDragoX/Win-Debloat-Tools
+- Win11Debloat: https://github.com/Raphire/Win11Debloat
+- Windows 11 release health: https://learn.microsoft.com/windows/release-health/windows11-release-information
 - Microsoft Hyper-V: https://learn.microsoft.com/windows-server/virtualization/hyper-v/
 - Microsoft WSL: https://learn.microsoft.com/windows/wsl/
 - Windows Sandbox: https://learn.microsoft.com/windows/security/application-security/application-isolation/windows-sandbox/
