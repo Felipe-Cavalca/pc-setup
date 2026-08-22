@@ -2,9 +2,9 @@
 
 Usuario Windows **Standard** exclusivo do agente.
 
-Pode trabalhar em `D:\Dev`, alterar codigo, executar builds/testes, subir seu ambiente de containers e fazer commits.
+Pode trabalhar no diretório `Development` configurado, alterar código, executar builds/testes, subir seu ambiente de containers e fazer commits.
 
-Nao deve acessar `D:\Data\Felipe`, chaves SSH do Felipe ou configuracoes administrativas do host.
+Não deve acessar o diretório `PersonalData` configurado, chaves SSH do usuário principal ou configurações administrativas do host.
 
 Config sugerida: `config/codex-standard.toml` -> `C:\Users\Codex\.codex\config.toml`.
 

@@ -1,6 +1,6 @@
-# Um ID winget por linha. Linhas # sao ignoradas.
+# Ferramentas de desenvolvimento.
 Git.Git
 Microsoft.PowerShell
 Microsoft.WindowsTerminal
 Microsoft.VisualStudioCode
-7zip.7zip
+Docker.DockerDesktop

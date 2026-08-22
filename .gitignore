@@ -10,3 +10,6 @@ secrets/
 .tmp/
 tmp/
 *.log
+
+# Instaladores offline sao locais; apenas o manifesto e versionado.
+installers/

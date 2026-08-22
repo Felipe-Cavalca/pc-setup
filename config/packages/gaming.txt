@@ -1,0 +1,3 @@
+# Jogos e launchers.
+Valve.Steam
+EpicGames.EpicGamesLauncher

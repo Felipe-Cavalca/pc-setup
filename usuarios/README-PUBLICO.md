@@ -11,7 +11,7 @@ Login Publico
 
 Nao adicionar a `Administrators` nem `Hyper-V Administrators`.
 
-No host, nao deve existir dado pessoal nem acesso a `D:\Dev` ou `D:\Data\Felipe`.
+No host, não deve existir dado pessoal nem acesso aos diretórios `Development` ou `PersonalData` configurados.
 
 A VM e persistente e pode manter navegador/configuracoes proprias. Se o guest for Windows, ele precisa de licenca valida propria.
 

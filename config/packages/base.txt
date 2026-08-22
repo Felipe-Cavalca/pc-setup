@@ -1,0 +1,5 @@
+# Aplicativos comuns. Um ID winget exato por linha.
+Google.Chrome
+Bitwarden.Bitwarden
+RARLab.WinRAR
+Google.GoogleDrive

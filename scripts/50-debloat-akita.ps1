@@ -1,74 +1,66 @@
-#requires -RunAsAdministrator
+#requires -Version 5.1
 [CmdletBinding()]
-param()
+param(
+    [string]$Config = (Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1'),
+    [switch]$Plan,
+    [switch]$Apply,
+    [switch]$ConfirmReviewed
+)
 
 $ErrorActionPreference = 'Stop'
+$coreModule = Join-Path $PSScriptRoot 'lib\PcSetup.Core.psm1'
+$recoveryModule = Join-Path $PSScriptRoot 'lib\PcSetup.Recovery.psm1'
+Import-Module $coreModule -Force
+Import-Module $recoveryModule -Force
 
-# O Win-Debloat-Tools citado originalmente pelo Akita foi arquivado.
-# Para Windows 11 atual usamos o sucessor mantido Win11Debloat, do Raphire,
-# fixado em uma release estavel em vez de executar uma URL flutuante.
-$repo = 'Raphire/Win11Debloat'
-$release = '2026.07.11'
-$targetWindows = '25H2'
-$minimumBuild = 26200
-
-$windows = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
-$displayVersion = $windows.DisplayVersion
-$currentBuild = [int]$windows.CurrentBuildNumber
-
-Write-Host "Windows detectado: $displayVersion (build $currentBuild)"
-Write-Host "Target deste setup: Windows 11 Pro $targetWindows (build >= $minimumBuild)"
-Write-Host "Debloat: $repo release $release"
-
-if ($currentBuild -lt $minimumBuild) {
-    throw "Este setup de debloat foi preparado para Windows 11 25H2/build 26200 ou posterior. Build atual: $currentBuild."
+$mode = Get-PcSetupExecutionMode -Plan:$Plan -Apply:$Apply
+$configuration = Import-PcSetupConfiguration -Path $Config
+$debloat = $configuration.Debloat
+$summary = [pscustomobject]@{
+    Step       = 'Debloat'
+    Mode       = $mode
+    Enabled    = [bool]$debloat.Enabled
+    Repository = [string]$debloat.Repository
+    Release    = [string]$debloat.Release
+    Action     = if ($debloat.Enabled) { 'ReviewThenApply' } else { 'None' }
 }
 
-# Win11Debloat 2026.07.11 exige Windows PowerShell 5.1 e recusa PowerShell 7.
-if ($PSVersionTable.PSEdition -ne 'Desktop') {
-    $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    Write-Host '[RELAUNCH] Abrindo o script no Windows PowerShell 5.1...'
-    $process = Start-Process -FilePath $windowsPowerShell -ArgumentList @(
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-File', "`"$PSCommandPath`""
-    ) -Wait -PassThru
-    exit $process.ExitCode
+if (-not $debloat.Enabled) {
+    Write-Host '[IGNORADO] Debloat desabilitado por padrao. O Windows permanece com o comportamento original.'
+    return $summary
+}
+if ($mode -eq 'Plan') {
+    Write-Host "[PLANO] Baixar $($debloat.Repository) $($debloat.Release), validar SHA-256 e abrir o modo interativo para revisao."
+    return $summary
+}
+if (-not $ConfirmReviewed) { throw 'Debloat exige -ConfirmReviewed depois da leitura de docs\DEBLOAT.md.' }
+if ([string]::IsNullOrWhiteSpace([string]$debloat.ArchiveSha256) -or [string]$debloat.ArchiveSha256 -notmatch '^[a-fA-F0-9]{64}$') {
+    throw 'Defina Debloat.ArchiveSha256 com o SHA-256 revisado da release antes de habilitar o debloat.'
 }
 
-$workRoot = Join-Path $env:TEMP "pc-setup-win11debloat-$release"
-$zip = "$workRoot.zip"
-$url = "https://github.com/$repo/archive/refs/tags/$release.zip"
+Assert-PcSetupAdministrator
+$null = Enter-PcSetupProtectedScript -EntryPoint $MyInvocation.MyCommand.Name
+if ($PSVersionTable.PSEdition -ne 'Desktop') { throw 'Execute o debloat diretamente no Windows PowerShell 5.1, nao no PowerShell 7.' }
 
-Remove-Item $workRoot -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item $zip -Force -ErrorAction SilentlyContinue
-
-Write-Host '[DOWNLOAD] Baixando release fixa do Win11Debloat...'
-Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-Expand-Archive -Path $zip -DestinationPath $workRoot -Force
-
-$script = Get-ChildItem $workRoot -Recurse -Filter 'Win11Debloat.ps1' | Select-Object -First 1
-if (-not $script) {
-    throw 'Win11Debloat.ps1 nao encontrado no pacote baixado.'
-}
-
-Get-ChildItem $script.Directory.FullName -Recurse -File | Unblock-File
-
-Write-Host '[RUN] Aplicando o preset padrao automaticamente...'
-Write-Host '      - cria restore point/backup de registry quando suportado'
-Write-Host '      - remove a selecao padrao de bloatware'
-Write-Host '      - desativa telemetria, sugestoes, Copilot/Recall e outros defaults'
-Write-Host '      - NAO usa -RemoveGamingApps; Xbox/Gaming modernos nao sao removidos por esse parametro'
-
-Push-Location $script.Directory.FullName
+$workRoot = Join-Path $env:TEMP ("pc-setup-win11debloat-" + [guid]::NewGuid().ToString('N'))
+$zipPath = "$workRoot.zip"
+$url = "https://github.com/$($debloat.Repository)/archive/refs/tags/$($debloat.Release).zip"
 try {
-    & $script.FullName -RunDefaults -Silent -CreateRestorePoint
-    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-        throw "Win11Debloat terminou com codigo $LASTEXITCODE"
-    }
+    Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
+    $actualHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
+    if ($actualHash -ne ([string]$debloat.ArchiveSha256).ToUpperInvariant()) { throw 'O SHA-256 do arquivo de debloat baixado diverge do valor revisado.' }
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $workRoot -Force
+    $scriptFile = Get-ChildItem -LiteralPath $workRoot -Recurse -Filter 'Win11Debloat.ps1' -File | Select-Object -First 1
+    if (-not $scriptFile) { throw 'Win11Debloat.ps1 nao foi encontrado no arquivo validado.' }
+    Get-ChildItem -LiteralPath $scriptFile.Directory.FullName -Recurse -File | Unblock-File
+
+    Write-Host '[REVISAO] O Win11Debloat sera aberto sem preset silencioso. Escolha conscientemente o que aplicar.' -ForegroundColor Yellow
+    & $scriptFile.FullName
+    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "Win11Debloat terminou com codigo $LASTEXITCODE." }
 }
 finally {
-    Pop-Location
+    if (Test-Path -LiteralPath $workRoot) { Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue }
 }
 
-Write-Host '[OK] Debloat concluido. Reinicie o Windows antes de validar o setup.' -ForegroundColor Green
+[pscustomobject]@{ Step = 'Debloat'; Mode = $mode; Enabled = $true; Repository = $debloat.Repository; Release = $debloat.Release; Action = 'Completed' }
