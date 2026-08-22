@@ -1,0 +1,6 @@
+# Um ID winget por linha. Linhas # sao ignoradas.
+Git.Git
+Microsoft.PowerShell
+Microsoft.WindowsTerminal
+Microsoft.VisualStudioCode
+7zip.7zip

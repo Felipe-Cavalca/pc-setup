@@ -1,0 +1,4 @@
+# C:\Users\God\.codex\config.toml
+# BREAK GLASS: usar apenas em sessao Windows elevada.
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
