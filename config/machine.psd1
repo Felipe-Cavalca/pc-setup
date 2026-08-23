@@ -3,17 +3,27 @@
     ProfileName   = 'felipe-adaptive'
 
     Execution = @{
-        # Unattended não faz perguntas durante -Apply. Valores ausentes ou ambíguos interrompem com erro.
-        Mode                      = 'Unattended'
+        # Interactive permite escolher o disco de dados no plano; a aplicacao reutiliza essa escolha.
+        Mode                      = 'Interactive'
         OnMissingSetting          = 'Stop'
         CollectSecretsBeforeApply = $true
         StoreSecretsInRepository  = $false
     }
 
+    Reconciliation = @{
+        # O pc-setup converge de forma aditiva: nao remove estado que deixou de ser listado.
+        Mode                       = 'Additive'
+        DisableUnrequestedFeatures = $false
+        RemoveDisabledAccounts     = $false
+        RemoveUnlistedPackages     = $false
+        RemoveUnlistedDirectories  = $false
+    }
+
     Windows = @{
         Edition      = 'Professional'
-        TargetVersion = '25H2'
-        MinimumBuild  = 26200
+        # Vazio aceita qualquer versao do Windows 11; a build minima ainda impede Windows 10.
+        TargetVersion = ''
+        MinimumBuild  = 22000
     }
 
     Machine = @{
@@ -30,10 +40,10 @@
         }
 
         Data = @{
-            # UseIfAvailable responde "sim" ao uso de um único segundo disco fixo.
+            # Ask pergunta se um segundo disco fixo deve ser usado quando houver um candidato seguro.
             # Valores aceitos: UseIfAvailable, Ask ou Ignore.
             Mode                       = 'Adaptive'
-            SecondaryDiskPolicy        = 'UseIfAvailable'
+            SecondaryDiskPolicy        = 'Ask'
             OnMultipleCandidates       = 'Stop'
             SingleDiskFallbackRoot     = '{SystemRoot}\Dados'
             AllowRemovableVolumes      = $false
@@ -50,7 +60,6 @@
             Downloads    = 'Downloads'
             VirtualMachines = 'VMs'
             Containers   = 'Containers'
-            AgentData    = 'Agent\Codex'
         }
     }
 
@@ -65,21 +74,55 @@
             Name    = 'Admin'
             Role    = 'Administrator'
         }
-        Codex = @{
-            Enabled = $true
-            Name    = 'Codex'
-            Role    = 'Standard'
-        }
-        God = @{
-            Enabled = $false
-            Name    = 'God'
-            Role    = 'Administrator'
-        }
         Public = @{
-            Enabled = $false
+            Enabled = $true
             Name    = 'Publico'
             Role    = 'Standard'
             VirtualMachineName = 'Publico'
+        }
+    }
+
+    Agent = @{
+        Enabled         = $true
+        Environment     = 'Agent'
+        DefaultCommand  = 'codex'
+        Isolation       = 'AiJail'
+
+        Harness = @{
+            Enabled        = $true
+            PackageManager = 'Npm'
+            Package        = '@openai/codex'
+            Version        = 'latest'
+        }
+
+        Workspace = @{
+            # O launcher concede acesso apenas ao projeto escolhido em cada execucao.
+            Mode        = 'SelectedProjectOnly'
+            DefaultPath = ''
+        }
+
+        Capabilities = @{
+            Network           = $true
+            PersistAgentState = $true
+            Docker            = $false
+            SSH               = $false
+            Display           = $false
+            GPU               = $false
+            X11               = $false
+            HostSharedMemory  = $false
+            TerminalPassthrough = $false
+            InheritEnvironment = $false
+            UpdateCheck       = $true
+            Worktree          = $true
+            SystemdUser       = $false
+            Tailscale         = $false
+            Pictures          = $false
+        }
+
+        # Apenas reserva a decisao para uma configuracao futura; nenhuma VM e criada pelo setup.
+        VirtualMachine = @{
+            Enabled = $false
+            Name    = 'Agent'
         }
     }
 
@@ -95,6 +138,7 @@
         Enabled                  = $true
         PreferredSource          = 'winget'
         PreferCurrentVersion     = $true
+        InstallScope             = 'machine'
         Profiles                 = @('base', 'development', 'gaming')
         AllowOfflineFallback     = $true
         OfflineInstallerDirectory = 'installers'
@@ -112,12 +156,14 @@
                 AccountKey   = 'DailyUser'
                 Distribution = 'Ubuntu-24.04'
                 Profile      = 'wsl\profiles\daily-user.psd1'
+                Default      = $true
             }
-            Codex = @{
+            Agent = @{
                 Enabled      = $true
-                AccountKey   = 'Codex'
+                AccountKey   = 'DailyUser'
                 Distribution = 'Ubuntu-24.04'
-                Profile      = 'wsl\profiles\codex.psd1'
+                Profile      = 'wsl\profiles\agent.psd1'
+                Default      = $false
             }
         }
     }
@@ -129,11 +175,15 @@
     }
 
     Debloat = @{
-        Enabled              = $false
+        Enabled              = $true
         Mode                 = 'ReviewThenApply'
         Repository           = 'Raphire/Win11Debloat'
         Release              = '2026.07.11'
-        ArchiveSha256        = ''
+        ArchiveSha256        = 'e97c8e36698c7b543da0b77cc34439c1a0b4917525b45a9d1ae7a02e23d4711d'
+        Preset               = 'RunDefaults'
+        Silent               = $true
+        AppRemovalTarget     = 'AllUsers'
+        RemoveGamingApps     = $false
         RequireSha256        = $true
         RequireConfirmation  = $true
     }
@@ -147,6 +197,7 @@
         AllowExistingRestorePointReuse    = $false
         AllowSameApplySessionReuse        = $true
         ProtectDirectScriptExecution      = $true
+        UserPhaseReceiptMaxAgeHours       = 24
     }
 
     Security = @{
@@ -157,12 +208,15 @@
         ReportBitLockerStatus   = $true
         RequireRecoveryKeyCheck = $false
         DemoteDailyUserAutomatically = $false
+        HyperVAdministratorAccounts = @('DailyUser')
     }
 
     Runtime = @{
         StateDirectory  = '{ProgramData}\pc-setup'
         ReportDirectory = '{ProgramData}\pc-setup\reports'
-        WingetInventoryPath = '{ProgramData}\pc-setup\winget-installed.json'
+        UserStateDirectory  = '{LocalAppData}\pc-setup'
+        UserReportDirectory = '{LocalAppData}\pc-setup\reports'
+        WingetInventoryPath = '{LocalAppData}\pc-setup\winget-installed.json'
         StopOnError     = $true
         RequirePlanBeforeApply = $true
     }

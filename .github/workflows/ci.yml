@@ -12,6 +12,7 @@ jobs:
   powershell:
     name: PowerShell 5.1
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - name: Baixar o repositorio
         uses: actions/checkout@v6
@@ -40,6 +41,7 @@ jobs:
   linux:
     name: Scripts WSL
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Baixar o repositorio
         uses: actions/checkout@v6
@@ -48,3 +50,7 @@ jobs:
         run: |
           bash -n wsl/linux/bootstrap.sh
           bash -n wsl/linux/verify.sh
+          bash -n wsl/linux/github-release.sh
+
+      - name: Analisar Bash
+        run: shellcheck wsl/linux/bootstrap.sh wsl/linux/verify.sh wsl/linux/github-release.sh

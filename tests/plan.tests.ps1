@@ -13,13 +13,13 @@ Assert-Equal 'Plan' $machine.Mode 'Identidade da maquina deve permanecer em modo
 
 $directories = & (Join-Path $root 'scripts\20-directories.ps1') -Config $config -Storage $storage -Plan
 Assert-Equal 'Plan' $directories.Mode 'Diretorios devem permanecer em modo de plano.'
-Assert-Equal 9 @($directories.Items).Count 'O plano deve listar todos os diretorios configurados.'
+Assert-Equal 8 @($directories.Items).Count 'O plano deve listar todos os diretorios configurados.'
 
 $permissions = & (Join-Path $root 'scripts\40-permissions.ps1') -Config $config -Storage $storage -Plan
 Assert-Equal 'Plan' $permissions.Mode 'Permissoes devem permanecer em modo de plano.'
-Assert-Equal 3 @($permissions.Items).Count 'O plano deve listar as tres ACLs protegidas.'
+Assert-Equal 2 @($permissions.Items).Count 'O plano deve listar as duas ACLs protegidas.'
 $oneDiskPermissions = & (Join-Path $root 'scripts\40-permissions.ps1') -Config (Join-Path $root 'config\examples\machine-one-disk.psd1') -Storage $storage -Plan
-Assert-Equal 2 @($oneDiskPermissions.Items).Count 'O perfil sem Codex nao deve criar ACL para uma conta ausente.'
+Assert-Equal 2 @($oneDiskPermissions.Items).Count 'O perfil sem agente nao deve criar ACL para dados do agente.'
 
 $packages = & (Join-Path $root 'scripts\60-packages.ps1') -Config $config -Plan
 Assert-Equal 11 @($packages.Items).Count 'O plano deve listar todos os pacotes.'
@@ -31,6 +31,7 @@ $personalization = & (Join-Path $root 'scripts\80-personalization.ps1') -Config 
 Assert-Equal $false $personalization.Enabled 'Personalizacao deve estar desabilitada no perfil padrao.'
 
 $debloat = & (Join-Path $root 'scripts\50-debloat-akita.ps1') -Config $config -Plan
-Assert-Equal $false $debloat.Enabled 'Debloat deve estar desabilitado no perfil padrao.'
+Assert-Equal $true $debloat.Enabled 'Debloat deve estar configurado no perfil Felipe.'
+Assert-Equal 'RunDefaults' $debloat.Preset 'O plano deve declarar o preset revisado.'
 
 Write-Host 'PASS: planos nao destrutivos dos componentes.' -ForegroundColor Green

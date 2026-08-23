@@ -23,8 +23,13 @@ $planItems = @(
     "Distribution=$($environmentDefinition.Distribution)",
     "LinuxUser=$($profile.LinuxUser)",
     "ProjectRoot=$($profile.ProjectRoot)",
-    "Packages=$(@($profile.Packages).Count)"
+    "Packages=$(@($profile.Packages).Count)",
+    "DefaultUser=$([bool]$profile.SetAsDefaultUser)",
+    "AiJail=$([bool]($profile.ContainsKey('AiJail') -and $profile.AiJail.Enabled))"
 )
+if ($profile.ContainsKey('Harness') -and $profile.Harness.Enabled) {
+    $planItems += "Harness=$($profile.Harness.Package)@$($profile.Harness.Version) ($($profile.Harness.Command))"
+}
 if ($mode -eq 'Plan') {
     Write-Host "[PLANO] WSL $($environmentDefinition.Name): $($planItems -join ', ')."
     return [pscustomobject]@{ Step = 'WslEnvironment'; Mode = $mode; Environment = $environmentDefinition.Name; Items = $planItems }
@@ -55,9 +60,11 @@ if ($bootstrapResult.ExitCode -ne 0) { throw "Bootstrap Linux falhou com codigo 
 & wsl.exe --terminate $distribution | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Nao foi possivel reiniciar $distribution para aplicar /etc/wsl.conf." }
 $defaultUser = Get-PcSetupWslDefaultUser -Distribution $distribution
-if ($defaultUser -ne [string]$profile.LinuxUser) { throw "Usuario padrao incorreto em ${distribution}: esperado $($profile.LinuxUser); encontrado $defaultUser." }
+$expectedDefaultUser = Get-PcSetupExpectedWslDefaultUser -Configuration $configuration -Environment $environmentDefinition
+if ($defaultUser -ne $expectedDefaultUser) { throw "Usuario padrao incorreto em ${distribution}: esperado $expectedDefaultUser; encontrado $defaultUser." }
 $verifyResult = Invoke-PcSetupWslLinuxScript -Distribution $distribution -ScriptPath $verifyLinuxPath -Environment $environmentDefinition -Profile $profile
 if ($verifyResult.ExitCode -ne 0) { throw "Verificacao Linux falhou com codigo $($verifyResult.ExitCode)." }
+$installedState = Get-PcSetupWslInstalledState -Distribution $distribution -ProfileName $environmentDefinition.Name
 
 $report = [ordered]@{
     GeneratedAt    = (Get-Date).ToString('o')
@@ -67,12 +74,16 @@ $report = [ordered]@{
     WslVersion     = Get-PcSetupWslDistributionVersion -Distribution $distribution
     LinuxUser      = $profile.LinuxUser
     DefaultUser    = $defaultUser
+    ExpectedDefaultUser = $expectedDefaultUser
     ProjectRoot    = $profile.ProjectRoot
     Packages       = @($profile.Packages)
+    AiJail         = if ($profile.ContainsKey('AiJail')) { $profile.AiJail } else { $null }
+    Harness        = if ($profile.ContainsKey('Harness')) { $profile.Harness } else { $null }
+    InstalledState = $installedState
     InstalledNow   = $installedNow
     Status         = 'Completed'
 }
-$reportDirectory = Join-Path $env:LOCALAPPDATA 'pc-setup\reports'
+$reportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'UserReportDirectory'
 $reportPath = Join-Path $reportDirectory ('wsl-bootstrap-' + $environmentDefinition.Name.ToLowerInvariant() + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json')
 Write-PcSetupJson -InputObject $report -Path $reportPath | Out-Null
 Write-Host "[RELATORIO] $reportPath" -ForegroundColor Green

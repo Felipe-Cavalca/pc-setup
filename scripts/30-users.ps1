@@ -21,6 +21,8 @@ if ($mode -eq 'Apply') {
 }
 
 $adminGroup = ([Security.Principal.SecurityIdentifier]'S-1-5-32-544').Translate([Security.Principal.NTAccount]).Value.Split('\')[-1]
+$hyperVGroup = Get-LocalGroup -SID 'S-1-5-32-578' -ErrorAction SilentlyContinue
+$hyperVAccountKeys = @($configuration.Security.HyperVAdministratorAccounts)
 $results = @()
 foreach ($account in @(Get-PcSetupAccounts -Configuration $configuration)) {
     if (-not $account.Enabled) {
@@ -33,6 +35,9 @@ foreach ($account in @(Get-PcSetupAccounts -Configuration $configuration)) {
     $members = @(Get-LocalGroupMember -Group $adminGroup -ErrorAction Stop)
     $isAdministrator = $null -ne ($members | Where-Object { $_.Name -match "\\$([regex]::Escape($account.Name))$" } | Select-Object -First 1)
     $targetAdministrator = $account.Role -eq 'Administrator'
+    $hyperVMembers = if ($hyperVGroup) { @(Get-LocalGroupMember -Group $hyperVGroup.Name -ErrorAction Stop) } else { @() }
+    $isHyperVAdministrator = $null -ne ($hyperVMembers | Where-Object { $_.Name -match "\\$([regex]::Escape($account.Name))$" } | Select-Object -First 1)
+    $targetHyperVAdministrator = $hyperVAccountKeys -contains $account.Key
 
     if ($mode -eq 'Plan') {
         $actions = @()
@@ -42,9 +47,11 @@ foreach ($account in @(Get-PcSetupAccounts -Configuration $configuration)) {
             if ($account.Key -eq 'DailyUser' -and -not $configuration.Security.DemoteDailyUserAutomatically) { $actions += 'ManualDemotionAfterAdminLoginTest' }
             else { $actions += 'RemoveFromAdministrators' }
         }
+        if ($targetHyperVAdministrator -and -not $isHyperVAdministrator) { $actions += 'AddToHyperVAdministrators' }
+        if (-not $targetHyperVAdministrator -and $isHyperVAdministrator) { $actions += 'RemoveFromHyperVAdministrators' }
         if ($actions.Count -eq 0) { $actions = @('None') }
         Write-Host "[PLANO] $($account.Name): $($actions -join ', ')."
-        $results += [pscustomobject]@{ Name = $account.Name; Requested = $true; Action = ($actions -join ','); Role = $account.Role }
+        $results += [pscustomobject]@{ Name = $account.Name; Requested = $true; Action = ($actions -join ','); Role = $account.Role; HyperVAdministrator = $targetHyperVAdministrator }
         continue
     }
 
@@ -78,7 +85,22 @@ foreach ($account in @(Get-PcSetupAccounts -Configuration $configuration)) {
             $action = 'RemovedFromAdministrators'
         }
     }
-    $results += [pscustomobject]@{ Name = $account.Name; Requested = $true; Action = $action; Role = $account.Role }
+
+    $hyperVAction = 'None'
+    if ($targetHyperVAdministrator -and -not $hyperVGroup) { throw 'O grupo Hyper-V Administrators nao existe. Habilite o Hyper-V, reinicie e retome o setup.' }
+    if ($hyperVGroup) {
+        $hyperVMembers = @(Get-LocalGroupMember -Group $hyperVGroup.Name -ErrorAction Stop)
+        $isHyperVAdministrator = $null -ne ($hyperVMembers | Where-Object { $_.Name -match "\\$([regex]::Escape($account.Name))$" } | Select-Object -First 1)
+        if ($targetHyperVAdministrator -and -not $isHyperVAdministrator) {
+            Add-LocalGroupMember -Group $hyperVGroup.Name -Member $account.Name -ErrorAction Stop
+            $hyperVAction = 'AddedToHyperVAdministrators'
+        }
+        elseif (-not $targetHyperVAdministrator -and $isHyperVAdministrator) {
+            Remove-LocalGroupMember -Group $hyperVGroup.Name -Member $account.Name -ErrorAction Stop
+            $hyperVAction = 'RemovedFromHyperVAdministrators'
+        }
+    }
+    $results += [pscustomobject]@{ Name = $account.Name; Requested = $true; Action = $action; Role = $account.Role; HyperVAdministrator = $targetHyperVAdministrator; HyperVAction = $hyperVAction }
 }
 
 [pscustomobject]@{ Step = 'Users'; Mode = $mode; Items = $results }

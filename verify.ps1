@@ -7,10 +7,8 @@ param(
 
 $ErrorActionPreference = 'Continue'
 $coreModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Core.psm1'
-$wingetModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Winget.psm1'
 $wslModule = Join-Path $PSScriptRoot 'wsl\PcSetup.Wsl.psm1'
 Import-Module $coreModule -Force
-Import-Module $wingetModule -Force
 Import-Module $wslModule -Force
 $configuration = Import-PcSetupConfiguration -Path $Config
 Assert-PcSetupAdministrator
@@ -34,12 +32,16 @@ Write-Host '=== pc-setup verify ===' -ForegroundColor Cyan
 
 try {
     $computerInfo = Get-ComputerInfo -Property WindowsProductName -ErrorAction Stop
-    $editionOk = if ($configuration.Windows.Edition -eq 'Professional') { $computerInfo.WindowsProductName -match ' Pro' } else { $computerInfo.WindowsProductName -match [regex]::Escape([string]$configuration.Windows.Edition) }
-    Add-Check -Status $(if ($editionOk) { 'PASS' } else { 'FAIL' }) -Name 'Edicao do Windows' -Detail ([string]$computerInfo.WindowsProductName)
-
     $windows = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
+    $editionOk = [string]$windows.EditionID -eq [string]$configuration.Windows.Edition
+    Add-Check -Status $(if ($editionOk) { 'PASS' } else { 'FAIL' }) -Name 'Edicao do Windows' -Detail "EditionID=$($windows.EditionID); produto=$($computerInfo.WindowsProductName)"
     $build = [int]$windows.CurrentBuildNumber
-    Add-Check -Status $(if ($windows.DisplayVersion -eq $configuration.Windows.TargetVersion) { 'PASS' } else { 'WARN' }) -Name 'Versao do Windows' -Detail "esperada $($configuration.Windows.TargetVersion); encontrada $($windows.DisplayVersion)"
+    if ([string]::IsNullOrWhiteSpace([string]$configuration.Windows.TargetVersion)) {
+        Add-Check -Status 'PASS' -Name 'Versao do Windows' -Detail "qualquer versao do Windows 11 aceita; encontrada $($windows.DisplayVersion)"
+    }
+    else {
+        Add-Check -Status $(if ($windows.DisplayVersion -eq $configuration.Windows.TargetVersion) { 'PASS' } else { 'FAIL' }) -Name 'Versao do Windows' -Detail "esperada $($configuration.Windows.TargetVersion); encontrada $($windows.DisplayVersion)"
+    }
     Add-Check -Status $(if ($build -ge [int]$configuration.Windows.MinimumBuild) { 'PASS' } else { 'FAIL' }) -Name 'Build do Windows' -Detail "minima $($configuration.Windows.MinimumBuild); encontrada $build"
 }
 catch { Add-Check -Status 'FAIL' -Name 'Windows' -Detail $_.Exception.Message }
@@ -60,21 +62,33 @@ catch { Add-Check -Status 'WARN' -Name 'Ativacao' -Detail $_.Exception.Message }
 
 $storage = $null
 $paths = $null
+$systemRoot = [IO.Path]::GetPathRoot($env:SystemRoot)
+$runtimeReportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'ReportDirectory' -SystemRoot $systemRoot
+$latestApplyReportFile = Get-ChildItem -LiteralPath $runtimeReportDirectory -Filter 'pc-setup-apply-*.json' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$latestApplyReport = $null
+if ($latestApplyReportFile) {
+    try { $latestApplyReport = Get-Content -LiteralPath $latestApplyReportFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json }
+    catch { Add-Check -Status 'FAIL' -Name 'Relatorio de aplicacao/formato' -Detail $_.Exception.Message }
+}
+$selectedDataRoot = ''
+if ($latestApplyReport -and $latestApplyReport.Status -eq 'Completed' -and $latestApplyReport.ConfigSha256 -eq $configHash) {
+    $selectedDataRoot = [string]$latestApplyReport.Storage.DataRoot
+}
 try {
-    $storage = Resolve-PcSetupStorage -Configuration $configuration
+    if ($configuration.Storage.Data.SecondaryDiskPolicy -eq 'Ask' -and [string]::IsNullOrWhiteSpace($selectedDataRoot)) {
+        throw 'Nao ha relatorio concluido desta configuracao com a escolha do armazenamento. Execute INSTALAR.cmd ou ATUALIZAR.cmd.'
+    }
+    $storage = Resolve-PcSetupStorage -Configuration $configuration -SelectedDataRoot $selectedDataRoot
     $paths = Get-PcSetupConfiguredPaths -Configuration $configuration -Storage $storage
     Add-Check -Status 'PASS' -Name 'Armazenamento' -Detail "Windows=$($storage.SystemRoot); dados=$($storage.DataRoot); modo=$($storage.DataMode)"
 }
 catch { Add-Check -Status 'FAIL' -Name 'Armazenamento' -Detail $_.Exception.Message }
 
 try {
-    $runtimeReportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'ReportDirectory' -SystemRoot $(if ($storage) { $storage.SystemRoot } else { $null })
-    $latestApplyReportFile = Get-ChildItem -LiteralPath $runtimeReportDirectory -Filter 'pc-setup-apply-*.json' -File -ErrorAction Stop | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if (-not $latestApplyReportFile) {
         Add-Check -Status 'WARN' -Name 'Relatorio de aplicacao' -Detail 'nenhum relatorio Apply encontrado'
     }
     else {
-        $latestApplyReport = Get-Content -LiteralPath $latestApplyReportFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
         Add-Check -Status $(if ($latestApplyReport.Status -eq 'Completed') { 'PASS' } else { 'FAIL' }) -Name 'Aplicacao concluida' -Detail "$($latestApplyReport.Status); $($latestApplyReportFile.FullName)"
         Add-Check -Status $(if ($latestApplyReport.ConfigSha256 -eq $configHash) { 'PASS' } else { 'FAIL' }) -Name 'Configuracao aplicada' -Detail $(if ($latestApplyReport.ConfigSha256 -eq $configHash) { $configHash } else { 'o relatorio pertence a outra configuracao' })
         Add-Check -Status $(if ($latestApplyReport.ProjectSha256 -eq $projectHash) { 'PASS' } else { 'WARN' }) -Name 'Versao do projeto aplicada' -Detail $(if ($latestApplyReport.ProjectSha256 -eq $projectHash) { $projectHash } else { 'o projeto mudou depois da ultima aplicacao' })
@@ -102,6 +116,8 @@ foreach ($key in $featureMap.Keys) {
 try {
     $adminGroup = ([Security.Principal.SecurityIdentifier]'S-1-5-32-544').Translate([Security.Principal.NTAccount]).Value.Split('\')[-1]
     $adminMembers = @(Get-LocalGroupMember -Group $adminGroup -ErrorAction Stop)
+    $hyperVGroup = Get-LocalGroup -SID 'S-1-5-32-578' -ErrorAction SilentlyContinue
+    $hyperVMembers = if ($hyperVGroup) { @(Get-LocalGroupMember -Group $hyperVGroup.Name -ErrorAction Stop) } else { @() }
     foreach ($account in @(Get-PcSetupAccounts -Configuration $configuration | Where-Object Enabled)) {
         $user = Get-LocalUser -Name $account.Name -ErrorAction SilentlyContinue
         if (-not $user) {
@@ -119,7 +135,11 @@ try {
         else {
             Add-Check -Status $(if (-not $isAdmin) { 'PASS' } else { 'FAIL' }) -Name "Papel $($account.Name)" -Detail $(if ($isAdmin) { 'administrador indevido' } else { 'usuario padrao' })
         }
+        $shouldManageHyperV = @($configuration.Security.HyperVAdministratorAccounts) -contains $account.Key
+        $managesHyperV = $null -ne ($hyperVMembers | Where-Object { $_.Name -match "\\$([regex]::Escape($account.Name))$" } | Select-Object -First 1)
+        Add-Check -Status $(if ($shouldManageHyperV -eq $managesHyperV) { 'PASS' } else { 'FAIL' }) -Name "Hyper-V $($account.Name)" -Detail $(if ($managesHyperV) { 'membro de Hyper-V Administrators' } else { 'sem associacao explicita ao Hyper-V' })
     }
+    if (@($configuration.Security.HyperVAdministratorAccounts).Count -gt 0 -and -not $hyperVGroup) { Add-Check -Status 'FAIL' -Name 'Hyper-V Administrators' -Detail 'grupo local ausente' }
 }
 catch { Add-Check -Status 'FAIL' -Name 'Usuarios locais' -Detail $_.Exception.Message }
 
@@ -129,12 +149,10 @@ if ($paths) {
     }
 
     $developmentGrants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'Modify' })
-    if ($configuration.Accounts.Codex.Enabled) { $developmentGrants += @{ Name = [string]$configuration.Accounts.Codex.Name; Rights = 'Modify' } }
     $aclExpectations = @(
         @{ Key = 'Development'; Grants = $developmentGrants },
         @{ Key = 'PersonalData'; Grants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'FullControl' }) }
     )
-    if ($configuration.Accounts.Codex.Enabled) { $aclExpectations += @{ Key = 'AgentData'; Grants = @(@{ Name = [string]$configuration.Accounts.Codex.Name; Rights = 'FullControl' }) } }
     foreach ($expectation in $aclExpectations) {
         $path = $paths[$expectation.Key]
         if (-not (Test-Path -LiteralPath $path -PathType Container)) { continue }
@@ -173,10 +191,6 @@ if ($paths) {
             $expectedIdentityNames = @($systemName, $administratorsName) + @($expectation.Grants | ForEach-Object { "$env:COMPUTERNAME\$($_.Name)" })
             $unexpected = @($identities | Where-Object { $_ -notin $expectedIdentityNames })
             Add-Check -Status $(if ($unexpected.Count -eq 0) { 'PASS' } else { 'FAIL' }) -Name "ACL $($expectation.Key)/identidades" -Detail $(if ($unexpected.Count -eq 0) { 'sem acessos extras' } else { "acessos inesperados: $($unexpected -join ', ')" })
-            if ($expectation.Key -eq 'PersonalData' -and $configuration.Accounts.Codex.Enabled) {
-                $codexPresent = $null -ne ($identities | Where-Object { $_ -match "\\$([regex]::Escape([string]$configuration.Accounts.Codex.Name))$" } | Select-Object -First 1)
-                Add-Check -Status $(if (-not $codexPresent) { 'PASS' } else { 'FAIL' }) -Name 'Isolamento dos dados pessoais' -Detail $(if ($codexPresent) { 'Codex possui acesso explicito' } else { 'Codex sem regra explicita' })
-            }
         }
         catch { Add-Check -Status 'FAIL' -Name "ACL $($expectation.Key)" -Detail $_.Exception.Message }
     }
@@ -243,7 +257,8 @@ if ($configuration.Features.WSL) {
                 Add-Check -Status $(if ($actualWslVersion -eq [int]$configuration.WSL.DefaultVersion) { 'PASS' } else { 'FAIL' }) -Name "WSL $($environmentDefinition.Name)/versao" -Detail "esperada=$($configuration.WSL.DefaultVersion); atual=$actualWslVersion"
                 $wslProfile = Import-PcSetupWslProfile -Configuration $configuration -Environment $environmentDefinition
                 $defaultWslUser = Get-PcSetupWslDefaultUser -Distribution $distribution
-                Add-Check -Status $(if ($defaultWslUser -eq [string]$wslProfile.LinuxUser) { 'PASS' } else { 'FAIL' }) -Name "WSL $($environmentDefinition.Name)/usuario padrao" -Detail "esperado=$($wslProfile.LinuxUser); atual=$defaultWslUser"
+                $expectedDefaultWslUser = Get-PcSetupExpectedWslDefaultUser -Configuration $configuration -Environment $environmentDefinition
+                Add-Check -Status $(if ($defaultWslUser -eq $expectedDefaultWslUser) { 'PASS' } else { 'FAIL' }) -Name "WSL $($environmentDefinition.Name)/usuario padrao" -Detail "esperado=$expectedDefaultWslUser; atual=$defaultWslUser"
                 $verifyLinuxPath = ConvertTo-PcSetupWslPath -Distribution $distribution -WindowsPath (Join-Path $PSScriptRoot 'wsl\linux\verify.sh')
                 $wslVerifyResult = Invoke-PcSetupWslLinuxScript -Distribution $distribution -ScriptPath $verifyLinuxPath -Environment $environmentDefinition -Profile $wslProfile
                 Add-Check -Status $(if ($wslVerifyResult.ExitCode -eq 0) { 'PASS' } else { 'FAIL' }) -Name "WSL $($environmentDefinition.Name)/conteudo" -Detail $(if ($wslVerifyResult.ExitCode -eq 0) { 'usuario, diretorio e pacotes conferidos' } else { "verify Linux retornou $($wslVerifyResult.ExitCode)" })
@@ -255,59 +270,11 @@ if ($configuration.Features.WSL) {
 }
 
 if ($configuration.Packages.Enabled) {
-    if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
-        Add-Check -Status 'FAIL' -Name 'Winget' -Detail 'comando ausente'
-    }
-    else {
-        $packageIds = @(Get-PcSetupPackageIds -Configuration $configuration)
-        $inventoryPath = Get-PcSetupRuntimePath -Configuration $configuration -Key 'WingetInventoryPath'
-        $savedInventory = $null
-        if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
-            Add-Check -Status 'FAIL' -Name 'Inventario Winget' -Detail "arquivo ausente: $inventoryPath"
-        }
-        else {
-            try {
-                $savedInventory = Get-Content -LiteralPath $inventoryPath -Raw -Encoding UTF8 | ConvertFrom-Json
-                $inventoryShapeOk = $savedInventory.SchemaVersion -eq '1.0' -and $savedInventory.Packages
-                Add-Check -Status $(if ($inventoryShapeOk) { 'PASS' } else { 'FAIL' }) -Name 'Inventario Winget/formato' -Detail $(if ($inventoryShapeOk) { $inventoryPath } else { 'schema ou lista de pacotes invalida' })
-                Add-Check -Status $(if ($savedInventory.ConfigSha256 -eq $configHash) { 'PASS' } else { 'FAIL' }) -Name 'Inventario Winget/configuracao' -Detail $(if ($savedInventory.ConfigSha256 -eq $configHash) { $configHash } else { 'inventario pertence a outra configuracao' })
-                Add-Check -Status $(if ($savedInventory.ProjectSha256 -eq $projectHash) { 'PASS' } else { 'WARN' }) -Name 'Inventario Winget/projeto' -Detail $(if ($savedInventory.ProjectSha256 -eq $projectHash) { $projectHash } else { 'o projeto mudou depois da captura' })
-            }
-            catch { Add-Check -Status 'FAIL' -Name 'Inventario Winget' -Detail $_.Exception.Message }
-        }
-        try {
-            $liveInventory = Get-PcSetupWingetInstalledInventory -PackageIds $packageIds -ConfigSha256 $configHash -ProjectSha256 $projectHash -RequireAll
-            foreach ($id in $packageIds) {
-                $livePackage = $liveInventory.Packages | Where-Object PackageId -eq $id | Select-Object -First 1
-                $savedPackage = if ($savedInventory) { $savedInventory.Packages | Where-Object PackageId -eq $id | Select-Object -First 1 } else { $null }
-                if (-not $livePackage -or -not $livePackage.Found) {
-                    Add-Check -Status 'FAIL' -Name "Pacote $id" -Detail 'nao encontrado no Winget'
-                    continue
-                }
-                if ($savedPackage -and $savedPackage.Found -and $savedPackage.Version -ne $livePackage.Version) {
-                    Add-Check -Status 'WARN' -Name "Pacote $id" -Detail "instalado=$($livePackage.Version); registrado no Apply=$($savedPackage.Version)"
-                }
-                else {
-                    Add-Check -Status 'PASS' -Name "Pacote $id" -Detail "versao instalada=$($livePackage.Version)"
-                }
-            }
-        }
-        catch { Add-Check -Status 'FAIL' -Name 'Pacotes Winget' -Detail $_.Exception.Message }
-    }
+    Add-Check -Status 'INFO' -Name 'Pacotes Winget' -Detail 'instalados, inventariados e validados sem elevacao na fase da conta diaria'
 }
 
 if ($configuration.Personalization.Enabled) {
-    try {
-        $wallpaperSource = Resolve-PcSetupProjectPath -Configuration $configuration -Value ([string]$configuration.Personalization.WallpaperPath) -SettingName 'Personalization.WallpaperPath'
-        $stateRoot = Get-PcSetupRuntimePath -Configuration $configuration -Key 'StateDirectory' -SystemRoot $(if ($storage) { $storage.SystemRoot } else { $null })
-        $wallpaperTarget = Join-Path (Join-Path $stateRoot 'assets') ('wallpaper' + [IO.Path]::GetExtension($wallpaperSource))
-        $wallpaperFilesExist = (Test-Path -LiteralPath $wallpaperSource -PathType Leaf) -and (Test-Path -LiteralPath $wallpaperTarget -PathType Leaf)
-        $wallpaperFilesMatch = $wallpaperFilesExist -and ((Get-FileHash -LiteralPath $wallpaperSource -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $wallpaperTarget -Algorithm SHA256).Hash)
-        Add-Check -Status $(if ($wallpaperFilesMatch) { 'PASS' } else { 'FAIL' }) -Name 'Plano de fundo/arquivo' -Detail $(if ($wallpaperFilesMatch) { $wallpaperTarget } else { 'origem e copia aplicada estao ausentes ou diferentes' })
-        $configuredWallpaper = [string](Get-ItemProperty -LiteralPath 'HKCU:\Control Panel\Desktop' -Name Wallpaper -ErrorAction Stop).Wallpaper
-        Add-Check -Status $(if ($configuredWallpaper -eq $wallpaperTarget) { 'PASS' } else { 'FAIL' }) -Name 'Plano de fundo/usuario atual' -Detail "esperado=$wallpaperTarget; atual=$configuredWallpaper"
-    }
-    catch { Add-Check -Status 'FAIL' -Name 'Personalizacao' -Detail $_.Exception.Message }
+    Add-Check -Status 'INFO' -Name 'Personalizacao' -Detail 'aplicada e validada sem elevacao na fase da conta diaria; consulte o relatorio user-profile em LOCALAPPDATA'
 }
 else {
     Add-Check -Status 'INFO' -Name 'Personalizacao' -Detail 'nao solicitada pela configuracao'

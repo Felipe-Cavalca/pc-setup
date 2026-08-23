@@ -18,17 +18,12 @@ $configuration = Import-PcSetupConfiguration -Path $Config
 if (-not $Storage) { $Storage = Resolve-PcSetupStorage -Configuration $configuration }
 $paths = Get-PcSetupConfiguredPaths -Configuration $configuration -Storage $Storage
 $primaryUser = [string]$configuration.Accounts.DailyUser.Name
-$codexUser = [string]$configuration.Accounts.Codex.Name
 
 $developmentGrants = @(@{ Identity = $primaryUser; Rights = 'Modify' })
-if ($configuration.Accounts.Codex.Enabled) { $developmentGrants += @{ Identity = $codexUser; Rights = 'Modify' } }
 $targets = @(
     [pscustomobject]@{ Key = 'Development'; Path = $paths.Development; Grants = $developmentGrants },
     [pscustomobject]@{ Key = 'PersonalData'; Path = $paths.PersonalData; Grants = @(@{ Identity = $primaryUser; Rights = 'FullControl' }) }
 )
-if ($configuration.Accounts.Codex.Enabled) {
-    $targets += [pscustomobject]@{ Key = 'AgentData'; Path = $paths.AgentData; Grants = @(@{ Identity = $codexUser; Rights = 'FullControl' }) }
-}
 
 foreach ($target in $targets) {
     $grantsText = @($target.Grants | ForEach-Object { "$($_.Identity):$($_.Rights)" }) -join ', '

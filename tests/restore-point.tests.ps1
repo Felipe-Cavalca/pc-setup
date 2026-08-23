@@ -76,16 +76,23 @@ try {
         'scripts\30-users.ps1',
         'scripts\40-permissions.ps1',
         'scripts\50-debloat-akita.ps1',
-        'scripts\60-packages.ps1',
-        'scripts\70-wsl.ps1',
-        'scripts\80-personalization.ps1'
+        'scripts\70-wsl.ps1'
     )) {
         $content = Get-Content -Raw -LiteralPath (Join-Path $root $relativePath)
         Assert-True ($content -match 'Get-PcSetupExecutionMode') "$relativePath deve separar plano de aplicacao."
         Assert-True ($content -match 'Enter-PcSetupProtectedScript') "$relativePath deve exigir protecao de restauracao na aplicacao."
     }
 
-    Write-Host 'PASS: protecao obrigatoria de ponto de restauracao.' -ForegroundColor Green
+    foreach ($relativePath in @('scripts\60-packages.ps1', 'scripts\80-personalization.ps1')) {
+        $content = Get-Content -Raw -LiteralPath (Join-Path $root $relativePath)
+        Assert-True ($content -match 'Get-PcSetupExecutionMode') "$relativePath deve separar plano de aplicacao."
+        Assert-True ($content -match 'Assert-PcSetupCompletedApplyReport') "$relativePath deve exigir o comprovante da aplicacao Windows protegida."
+        Assert-True ($content -notmatch 'Enter-PcSetupProtectedScript') "$relativePath nao deve criar outro ponto na fase sem elevacao da conta diaria."
+    }
+    $userPhase = Get-Content -Raw -LiteralPath (Join-Path $root 'scripts\90-user-profile.ps1')
+    Assert-True ($userPhase -match 'Assert-PcSetupCompletedApplyReport') 'A fase da conta diaria deve validar o comprovante protegido antes de alterar o perfil.'
+
+    Write-Host 'PASS: protecao obrigatoria de ponto de restauracao e comprovante da fase de usuario.' -ForegroundColor Green
 }
 finally {
     Stop-PcSetupChangeSession

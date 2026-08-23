@@ -9,10 +9,18 @@
         StoreSecretsInRepository  = $false
     }
 
+    Reconciliation = @{
+        Mode                        = 'Additive'
+        DisableUnrequestedFeatures = $false
+        RemoveDisabledAccounts      = $false
+        RemoveUnlistedPackages      = $false
+        RemoveUnlistedDirectories   = $false
+    }
+
     Windows = @{
         Edition       = 'Professional'
-        TargetVersion = '25H2'
-        MinimumBuild  = 26200
+        TargetVersion = ''
+        MinimumBuild  = 22000
     }
 
     Machine = @{
@@ -44,7 +52,6 @@
             Downloads    = 'Downloads'
             VirtualMachines = 'VMs'
             Containers   = 'Containers'
-            AgentData    = 'Agent\Codex'
         }
     }
 
@@ -59,21 +66,49 @@
             Name    = 'Admin'
             Role    = 'Administrator'
         }
-        Codex = @{
-            Enabled = $false
-            Name    = 'Codex'
-            Role    = 'Standard'
-        }
-        God = @{
-            Enabled = $false
-            Name    = 'God'
-            Role    = 'Administrator'
-        }
         Public = @{
             Enabled = $false
             Name    = 'Publico'
             Role    = 'Standard'
             VirtualMachineName = 'Publico'
+        }
+    }
+
+    Agent = @{
+        Enabled        = $false
+        Environment    = 'Agent'
+        DefaultCommand = 'codex'
+        Isolation      = 'AiJail'
+        Harness = @{
+            Enabled        = $false
+            PackageManager = 'Npm'
+            Package        = '@openai/codex'
+            Version        = 'latest'
+        }
+        Workspace = @{
+            Mode        = 'SelectedProjectOnly'
+            DefaultPath = ''
+        }
+        Capabilities = @{
+            Network           = $true
+            PersistAgentState = $true
+            Docker            = $false
+            SSH               = $false
+            Display           = $false
+            GPU               = $false
+            X11               = $false
+            HostSharedMemory  = $false
+            TerminalPassthrough = $false
+            InheritEnvironment = $false
+            UpdateCheck       = $true
+            Worktree          = $true
+            SystemdUser       = $false
+            Tailscale         = $false
+            Pictures          = $false
+        }
+        VirtualMachine = @{
+            Enabled = $false
+            Name    = 'Agent'
         }
     }
 
@@ -89,6 +124,7 @@
         Enabled                   = $true
         PreferredSource           = 'winget'
         PreferCurrentVersion      = $true
+        InstallScope              = 'machine'
         Profiles                  = @('base')
         AllowOfflineFallback      = $true
         OfflineInstallerDirectory = 'installers'
@@ -106,6 +142,14 @@
                 AccountKey   = 'DailyUser'
                 Distribution = 'Ubuntu-24.04'
                 Profile      = 'wsl\profiles\generic-user.psd1'
+                Default      = $true
+            }
+            Agent = @{
+                Enabled      = $false
+                AccountKey   = 'DailyUser'
+                Distribution = 'Ubuntu-24.04'
+                Profile      = 'wsl\profiles\agent.psd1'
+                Default      = $false
             }
         }
     }
@@ -121,6 +165,10 @@
         Repository          = 'Raphire/Win11Debloat'
         Release             = '2026.07.11'
         ArchiveSha256       = ''
+        Preset              = 'RunDefaults'
+        Silent              = $true
+        AppRemovalTarget    = 'AllUsers'
+        RemoveGamingApps    = $false
         RequireSha256       = $true
         RequireConfirmation = $true
     }
@@ -134,6 +182,7 @@
         AllowExistingRestorePointReuse    = $false
         AllowSameApplySessionReuse        = $true
         ProtectDirectScriptExecution      = $true
+        UserPhaseReceiptMaxAgeHours       = 24
     }
 
     Security = @{
@@ -144,12 +193,15 @@
         ReportBitLockerStatus   = $true
         RequireRecoveryKeyCheck = $false
         DemoteDailyUserAutomatically = $false
+        HyperVAdministratorAccounts = @()
     }
 
     Runtime = @{
         StateDirectory  = '{ProgramData}\pc-setup'
         ReportDirectory = '{ProgramData}\pc-setup\reports'
-        WingetInventoryPath = '{ProgramData}\pc-setup\winget-installed.json'
+        UserStateDirectory  = '{LocalAppData}\pc-setup'
+        UserReportDirectory = '{LocalAppData}\pc-setup\reports'
+        WingetInventoryPath = '{LocalAppData}\pc-setup\winget-installed.json'
         StopOnError     = $true
         RequirePlanBeforeApply = $true
     }

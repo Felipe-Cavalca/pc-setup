@@ -1,13 +1,19 @@
 #requires -Version 5.1
 [CmdletBinding()]
-param()
+param(
+    [string]$Config = (Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1'),
+    [switch]$NoPause,
+    [ValidateSet('INSTALAR.cmd','ATUALIZAR.cmd')]
+    [string]$LauncherName = 'INSTALAR.cmd'
+)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$configPath = Join-Path $root 'config\machine.psd1'
+$configPath = [IO.Path]::GetFullPath($Config)
 $bootstrapPath = Join-Path $root 'bootstrap.ps1'
 $verifyPath = Join-Path $root 'verify.ps1'
 $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$operation = if ($LauncherName -eq 'INSTALAR.cmd') { 'Instalacao' } else { 'Atualizacao' }
 
 function Test-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -16,12 +22,14 @@ function Test-Administrator {
 }
 
 function Wait-PcSetupExit {
+    if ($NoPause) { return }
     [void](Read-Host 'Pressione ENTER para fechar')
 }
 
 if (-not (Test-Administrator)) {
     try {
-        $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+        $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Config `"$configPath`" -LauncherName $LauncherName"
+        if ($NoPause) { $arguments += ' -NoPause' }
         $process = Start-Process -FilePath $windowsPowerShell -ArgumentList $arguments -Verb RunAs -Wait -PassThru
         exit $process.ExitCode
     }
@@ -33,20 +41,19 @@ if (-not (Test-Administrator)) {
 }
 
 try {
-    [Console]::Title = 'pc-setup - Instalacao do Windows'
+    [Console]::Title = "pc-setup - $operation do Windows"
     Set-Location -LiteralPath $root
 
     $coreModule = Join-Path $root 'scripts\lib\PcSetup.Core.psm1'
     Import-Module $coreModule -Force
     $configuration = Import-PcSetupConfiguration -Path $configPath
-    $storage = Resolve-PcSetupStorage -Configuration $configuration
-    $stateDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'StateDirectory' -SystemRoot $storage.SystemRoot
+    $systemRoot = [IO.Path]::GetPathRoot($env:SystemRoot)
+    $stateDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'StateDirectory' -SystemRoot $systemRoot
     $applyStatePath = Join-Path $stateDirectory 'apply-state.json'
 
     Clear-Host
-    Write-Host '=== pc-setup: instalacao assistida ===' -ForegroundColor Cyan
+    Write-Host "=== pc-setup: $($operation.ToLowerInvariant()) assistida ===" -ForegroundColor Cyan
     Write-Host "Perfil: $($configuration.ProfileName)"
-    Write-Host "Dados: $($storage.DataRoot)"
     Write-Host ''
 
     if (Test-Path -LiteralPath $applyStatePath -PathType Leaf) {
@@ -59,10 +66,11 @@ try {
         & $bootstrapPath -Config $configPath -Plan
 
         Write-Host ''
-        $answer = Read-Host 'Conferiu o plano e quer iniciar a instalacao? Digite S para continuar'
+        $answer = Read-Host "Conferiu o plano e quer iniciar a $($operation.ToLowerInvariant())? Digite S para continuar"
         if ($answer.Trim().ToUpperInvariant() -notin @('S', 'SIM')) {
-            Write-Host 'Instalacao cancelada. O plano foi mantido para consulta.' -ForegroundColor Yellow
+            Write-Host "$operation cancelada. O plano foi mantido para consulta." -ForegroundColor Yellow
             Wait-PcSetupExit
+            if ($NoPause) { exit 2 }
             exit 0
         }
 
@@ -74,12 +82,13 @@ try {
         if ($state.Stage -eq 'RestartRequired') {
             Write-Host ''
             Write-Host 'REINICIO NECESSARIO' -ForegroundColor Yellow
-            Write-Host 'Reinicie o Windows e clique em INSTALAR.cmd novamente. A instalacao continuara do ponto correto.'
+            Write-Host "Reinicie o Windows e clique em $LauncherName novamente. A aplicacao continuara do ponto correto."
         }
         else {
-            Write-Host "A instalacao ficou pendente na etapa $($state.Stage). Clique em INSTALAR.cmd novamente para tentar continuar." -ForegroundColor Yellow
+            Write-Host "A aplicacao ficou pendente na etapa $($state.Stage). Clique em $LauncherName novamente para tentar continuar." -ForegroundColor Yellow
         }
         Wait-PcSetupExit
+        if ($NoPause) { exit 3 }
         exit 0
     }
 
@@ -89,11 +98,11 @@ try {
     $verificationExitCode = $LASTEXITCODE
     if ($verificationExitCode -eq 0) {
         Write-Host ''
-        Write-Host 'INSTALACAO E VALIDACAO CONCLUIDAS.' -ForegroundColor Green
+        Write-Host "$($operation.ToUpperInvariant()) E VALIDACAO CONCLUIDAS." -ForegroundColor Green
     }
     else {
         Write-Host ''
-        Write-Host "A instalacao terminou, mas a validacao encontrou falhas. Codigo: $verificationExitCode" -ForegroundColor Yellow
+        Write-Host "A $($operation.ToLowerInvariant()) terminou, mas a validacao encontrou falhas. Codigo: $verificationExitCode" -ForegroundColor Yellow
         Write-Host 'Consulte o relatorio exibido acima.'
     }
     Wait-PcSetupExit
@@ -103,7 +112,7 @@ catch {
     Write-Host ''
     Write-Host 'O pc-setup foi interrompido com seguranca.' -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
-    Write-Host 'Corrija o item informado e clique em INSTALAR.cmd novamente.' -ForegroundColor Yellow
+    Write-Host "Corrija o item informado e clique em $LauncherName novamente." -ForegroundColor Yellow
     Wait-PcSetupExit
     exit 1
 }

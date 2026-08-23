@@ -27,11 +27,13 @@ $actualVersion = Get-PcSetupWslDistributionVersion -Distribution $distribution
 $expectedVersion = [int]$configuration.WSL.DefaultVersion
 if ($actualVersion -ne $expectedVersion) { throw "Versao WSL incorreta para ${distribution}: esperada $expectedVersion; encontrada $actualVersion." }
 $defaultUser = Get-PcSetupWslDefaultUser -Distribution $distribution
-if ($defaultUser -ne [string]$profile.LinuxUser) { throw "Usuario padrao incorreto em ${distribution}: esperado $($profile.LinuxUser); encontrado $defaultUser." }
+$expectedDefaultUser = Get-PcSetupExpectedWslDefaultUser -Configuration $configuration -Environment $environmentDefinition
+if ($defaultUser -ne $expectedDefaultUser) { throw "Usuario padrao incorreto em ${distribution}: esperado $expectedDefaultUser; encontrado $defaultUser." }
 
 $verifyLinuxPath = ConvertTo-PcSetupWslPath -Distribution $distribution -WindowsPath (Join-Path $PSScriptRoot 'linux\verify.sh')
 $verifyResult = Invoke-PcSetupWslLinuxScript -Distribution $distribution -ScriptPath $verifyLinuxPath -Environment $environmentDefinition -Profile $profile
 $status = if ($verifyResult.ExitCode -eq 0) { 'PASS' } else { 'FAIL' }
+$installedState = Get-PcSetupWslInstalledState -Distribution $distribution -ProfileName $environmentDefinition.Name
 $report = [ordered]@{
     GeneratedAt    = (Get-Date).ToString('o')
     Environment    = $environmentDefinition.Name
@@ -40,13 +42,17 @@ $report = [ordered]@{
     WslVersion     = $actualVersion
     LinuxUser      = $profile.LinuxUser
     DefaultUser    = $defaultUser
+    ExpectedDefaultUser = $expectedDefaultUser
     ProjectRoot    = $profile.ProjectRoot
     Packages       = @($profile.Packages)
+    AiJail         = if ($profile.ContainsKey('AiJail')) { $profile.AiJail } else { $null }
+    Harness        = if ($profile.ContainsKey('Harness')) { $profile.Harness } else { $null }
+    InstalledState = $installedState
     Status         = $status
     Output         = @($verifyResult.Output)
 }
 if ([string]::IsNullOrWhiteSpace($ReportPath)) {
-    $reportDirectory = Join-Path $env:LOCALAPPDATA 'pc-setup\reports'
+    $reportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'UserReportDirectory'
     $ReportPath = Join-Path $reportDirectory ('wsl-verify-' + $environmentDefinition.Name.ToLowerInvariant() + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json')
 }
 Write-PcSetupJson -InputObject $report -Path $ReportPath | Out-Null

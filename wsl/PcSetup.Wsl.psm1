@@ -11,8 +11,12 @@ function Resolve-PcSetupWslTarget {
     $environments = @(Get-PcSetupWslEnvironments -Configuration $Configuration | Where-Object Enabled)
     if ([string]::IsNullOrWhiteSpace($EnvironmentName)) {
         $matches = @($environments | Where-Object { $_.WindowsAccount -eq $CurrentWindowsAccount })
-        if ($matches.Count -ne 1) { throw "Nao foi possivel selecionar um ambiente WSL para o usuario Windows $CurrentWindowsAccount. Informe -Environment." }
-        $environment = $matches[0]
+        if ($matches.Count -eq 1) { $environment = $matches[0] }
+        else {
+            $defaults = @($matches | Where-Object Default)
+            if ($defaults.Count -ne 1) { throw "Nao foi possivel selecionar um ambiente WSL para o usuario Windows $CurrentWindowsAccount. Informe -Environment." }
+            $environment = $defaults[0]
+        }
     }
     else {
         $environment = $environments | Where-Object { $_.Name -eq $EnvironmentName } | Select-Object -First 1
@@ -20,6 +24,24 @@ function Resolve-PcSetupWslTarget {
     }
     $profile = Import-PcSetupWslProfile -Configuration $Configuration -Environment $environment
     return [pscustomobject]@{ Environment = $environment; Profile = $profile }
+}
+
+function Get-PcSetupExpectedWslDefaultUser {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$Configuration,
+        [Parameter(Mandatory)]$Environment
+    )
+
+    $defaultEnvironment = Get-PcSetupWslEnvironments -Configuration $Configuration |
+        Where-Object {
+            $_.Enabled -and $_.Default -and
+            $_.WindowsAccount -eq $Environment.WindowsAccount -and
+            $_.Distribution -eq $Environment.Distribution
+        } |
+        Select-Object -First 1
+    if (-not $defaultEnvironment) { throw "Ambiente WSL padrao ausente para $($Environment.WindowsAccount)/$($Environment.Distribution)." }
+    return [string](Import-PcSetupWslProfile -Configuration $Configuration -Environment $defaultEnvironment).LinuxUser
 }
 
 function Get-PcSetupWslDistributionNames {
@@ -86,13 +108,68 @@ function Invoke-PcSetupWslLinuxScript {
     $arguments = @(
         '--profile-name', [string]$Environment.Name,
         '--linux-user', [string]$Profile.LinuxUser,
-        '--project-root', [string]$Profile.ProjectRoot
+        '--project-root', [string]$Profile.ProjectRoot,
+        '--project-root-mode', [string]$Profile.ProjectRootMode,
+        '--set-default-user', ([string][bool]$Profile.SetAsDefaultUser).ToLowerInvariant(),
+        '--require-no-sudo', ([string][bool]$Profile.RequireNoSudo).ToLowerInvariant()
     )
     foreach ($package in @($Profile.Packages)) { $arguments += @('--package', [string]$package) }
+    if (-not [string]::IsNullOrWhiteSpace([string]$Profile.SharedGroup)) { $arguments += @('--shared-group', [string]$Profile.SharedGroup) }
+    foreach ($sharedUser in @($Profile.SharedWith)) { $arguments += @('--shared-with', [string]$sharedUser) }
+    if ($Profile.ContainsKey('AiJail') -and $Profile.AiJail.Enabled) {
+        $arguments += @(
+            '--ai-jail-repository', [string]$Profile.AiJail.Repository,
+            '--ai-jail-version', [string]$Profile.AiJail.Version,
+            '--ai-jail-architecture', [string]$Profile.AiJail.Architecture,
+            '--ai-jail-sha256', [string]$Profile.AiJail.Sha256,
+            '--ai-jail-require-asset-digest', ([string][bool]$Profile.AiJail.RequireAssetDigest).ToLowerInvariant()
+        )
+    }
+    if ($Profile.ContainsKey('Harness') -and $Profile.Harness.Enabled) {
+        $arguments += @(
+            '--harness-command', [string]$Profile.Harness.Command,
+            '--harness-package', [string]$Profile.Harness.Package,
+            '--harness-version', [string]$Profile.Harness.Version
+        )
+    }
     $output = @(& $WslCommand --distribution $Distribution --user root -- bash $ScriptPath @arguments 2>&1)
     $exitCode = $LASTEXITCODE
     $output | Out-Host
     return [pscustomobject]@{ ExitCode = $exitCode; Output = @($output | ForEach-Object { [string]$_ }) }
 }
 
-Export-ModuleMember -Function Resolve-PcSetupWslTarget, Get-PcSetupWslDistributionNames, Get-PcSetupWslDistributionVersion, Get-PcSetupWslDefaultUser, ConvertTo-PcSetupWslPath, Invoke-PcSetupWslLinuxScript
+function Get-PcSetupWslInstalledState {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Distribution,
+        [Parameter(Mandatory)][string]$ProfileName,
+        [string]$WslCommand = 'wsl.exe'
+    )
+
+    if ($ProfileName -notmatch '^[A-Za-z][A-Za-z0-9_-]*$') { throw "Nome de perfil WSL invalido: $ProfileName" }
+    $manifestPath = "/var/lib/pc-setup/$ProfileName/installed.tsv"
+    $lines = @(& $WslCommand --distribution $Distribution --user root -- cat -- $manifestPath 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw "Manifesto WSL ausente ou ilegivel: $manifestPath" }
+    $metadata = [ordered]@{}
+    $packages = @()
+    foreach ($rawLine in $lines) {
+        $line = ([string]$rawLine).Replace([char]0, '')
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $parts = $line -split "`t", 2
+        $key = $parts[0]
+        $value = if ($parts.Count -eq 2) { $parts[1] } else { '' }
+        if ($key.StartsWith('package=')) {
+            $packages += [pscustomobject]@{ Name = $key.Substring(8); Version = $value }
+        }
+        elseif ($key.Contains('=')) {
+            $pair = $key -split '=', 2
+            $metadata[$pair[0]] = $pair[1]
+        }
+        else {
+            $metadata[$key] = $value
+        }
+    }
+    return [pscustomobject]@{ ManifestPath = $manifestPath; Metadata = $metadata; Packages = $packages }
+}
+
+Export-ModuleMember -Function Resolve-PcSetupWslTarget, Get-PcSetupExpectedWslDefaultUser, Get-PcSetupWslDistributionNames, Get-PcSetupWslDistributionVersion, Get-PcSetupWslDefaultUser, ConvertTo-PcSetupWslPath, Invoke-PcSetupWslLinuxScript, Get-PcSetupWslInstalledState

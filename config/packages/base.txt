@@ -1,5 +1,5 @@
-# Aplicativos comuns. Um ID winget exato por linha.
-Google.Chrome
-Bitwarden.Bitwarden
-RARLab.WinRAR
-Google.GoogleDrive
+# Aplicativos comuns. Formato: ID winget exato|escopo.
+Google.Chrome|machine
+Bitwarden.Bitwarden|user
+RARLab.WinRAR|machine
+Google.GoogleDrive|machine

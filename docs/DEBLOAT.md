@@ -1,26 +1,36 @@
-# Debloat opcional
+# Debloat configurado
 
-O perfil padrão não executa debloat. Esta etapa é isolada porque remove aplicativos e muda várias preferências do Windows; o ganho é subjetivo e o risco é maior que nas demais etapas.
+O perfil Felipe usa `Raphire/Win11Debloat` na release fixa `2026.07.11`. O wrapper baixa somente o ZIP dessa tag, compara o SHA-256 versionado e interrompe antes da extração se o conteúdo divergir.
 
-O wrapper usa `Raphire/Win11Debloat` na release `2026.07.11`, mas não executa uma URL flutuante nem escolhe um preset silencioso. Ele baixa o arquivo da tag, compara o SHA-256 configurado e abre a interface oficial para revisão.
+## Comportamento definido
 
-## Habilitar conscientemente
+A execução chama:
 
-1. Leia as mudanças da release e os arquivos `Config/Apps.json` e `Config/DefaultSettings.json` do projeto externo.
-2. Baixe a mesma tag por um caminho confiável e calcule o SHA-256 do ZIP.
-3. Em `config/machine.psd1`, defina `Debloat.ArchiveSha256` e mude `Debloat.Enabled` para `$true`.
-4. Gere novamente o plano do setup.
-5. Execute em Windows PowerShell 5.1 como Administrador:
+```powershell
+Win11Debloat.ps1 -RunDefaults -Silent -AppRemovalTarget AllUsers
+```
+
+Isso aplica os ajustes e a seleção padrão de aplicativos da release para todos os usuários. O wrapper não envia `-RemoveGamingApps` nem `-ForceRemoveEdge`; Xbox/Game Bar e Edge não são removidos por esses parâmetros.
+
+O preset padrão inclui mudanças de privacidade, sugestões, pesquisa e recursos de IA, além da lista padrão de aplicativos da ferramenta. A lista exata fica em `Config/Apps.json` e `Config/DefaultSettings.json` da tag fixada.
+
+## Executar
+
+O debloat permanece separado do bootstrap principal porque remove aplicativos e muda diversas preferências. Depois de concluir o setup base, leia esta página e execute em Windows PowerShell 5.1 como Administrador:
 
 ```powershell
 .\scripts\50-debloat-akita.ps1 -Config .\config\machine.psd1 -Plan
 .\scripts\50-debloat-akita.ps1 -Config .\config\machine.psd1 -Apply -ConfirmReviewed
 ```
 
-O segundo comando cria e valida um ponto de restauração antes do download. Hash ausente ou divergente interrompe a execução.
+A aplicação cria e valida um ponto de restauração antes do download. Por causa do limite do Windows para `Checkpoint-Computer`, pode ser necessário aguardar o intervalo de 24 horas depois do ponto criado pelo setup base.
 
 ## Depois
 
-Reinicie e teste Windows Update, Microsoft Store, Defender, dispositivos, pesquisa, menu Iniciar, Xbox e jogos utilizados. Execute `verify.ps1` novamente.
+Reinicie e teste Windows Update, Microsoft Store, Defender, pesquisa, menu Iniciar, Edge e jogos. Execute `verify.ps1` novamente.
 
-O objetivo é remover apenas o que foi compreendido e revisado, mantendo o Windows recuperável.
+Referências oficiais:
+
+- [release 2026.07.11](https://github.com/Raphire/Win11Debloat/releases/tag/2026.07.11)
+- [configurações padrão](https://github.com/Raphire/Win11Debloat/wiki/Default-Settings)
+- [remoção de aplicativos](https://github.com/Raphire/Win11Debloat/wiki/App-Removal)

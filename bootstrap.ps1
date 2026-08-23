@@ -20,17 +20,30 @@ if ($mode -eq 'Apply' -and $PSVersionTable.PSEdition -ne 'Desktop') {
 }
 $computerInfo = Get-ComputerInfo -Property WindowsProductName -ErrorAction Stop
 $windowsRegistry = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
-$editionOk = if ($configuration.Windows.Edition -eq 'Professional') { $computerInfo.WindowsProductName -match ' Pro' } else { $computerInfo.WindowsProductName -match [regex]::Escape([string]$configuration.Windows.Edition) }
-if (-not $editionOk) { throw "Edicao do Windows incompativel. Esperada: $($configuration.Windows.Edition). Encontrada: $($computerInfo.WindowsProductName)." }
+$editionOk = [string]$windowsRegistry.EditionID -eq [string]$configuration.Windows.Edition
+if (-not $editionOk) { throw "Edicao do Windows incompativel. EditionID esperado: $($configuration.Windows.Edition). Encontrado: $($windowsRegistry.EditionID) ($($computerInfo.WindowsProductName))." }
 if ([int]$windowsRegistry.CurrentBuildNumber -lt [int]$configuration.Windows.MinimumBuild) { throw "Build do Windows abaixo da minima configurada: $($windowsRegistry.CurrentBuildNumber) < $($configuration.Windows.MinimumBuild)." }
-if ([string]$windowsRegistry.DisplayVersion -ne [string]$configuration.Windows.TargetVersion) { throw "Versao do Windows incompativel. Esperada: $($configuration.Windows.TargetVersion). Encontrada: $($windowsRegistry.DisplayVersion)." }
-$storage = Resolve-PcSetupStorage -Configuration $configuration
+if (-not [string]::IsNullOrWhiteSpace([string]$configuration.Windows.TargetVersion) -and [string]$windowsRegistry.DisplayVersion -ne [string]$configuration.Windows.TargetVersion) {
+    throw "Versao do Windows incompativel. Esperada: $($configuration.Windows.TargetVersion). Encontrada: $($windowsRegistry.DisplayVersion)."
+}
 $configHash = (Get-FileHash -LiteralPath $configuration._ConfigPath -Algorithm SHA256).Hash
 $projectHash = Get-PcSetupProjectFingerprint -Configuration $configuration
-$stateDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'StateDirectory' -SystemRoot $storage.SystemRoot
-$reportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'ReportDirectory' -SystemRoot $storage.SystemRoot
+$systemRoot = [IO.Path]::GetPathRoot($env:SystemRoot)
+$stateDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'StateDirectory' -SystemRoot $systemRoot
+$reportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'ReportDirectory' -SystemRoot $systemRoot
 $planReceiptPath = Join-Path $stateDirectory 'last-plan.json'
 $applyStatePath = Join-Path $stateDirectory 'apply-state.json'
+$receipt = $null
+$selectedDataRoot = ''
+if ($mode -eq 'Apply' -and $configuration.Runtime.RequirePlanBeforeApply) {
+    if (-not (Test-Path -LiteralPath $planReceiptPath -PathType Leaf)) { throw 'Execute bootstrap.ps1 -Plan antes de usar -Apply.' }
+    $receipt = Get-Content -Raw -LiteralPath $planReceiptPath | ConvertFrom-Json
+    if ($receipt.ConfigSha256 -ne $configHash -or $receipt.ProjectSha256 -ne $projectHash) {
+        throw 'O projeto ou a configuracao mudou desde o ultimo plano. Execute -Plan novamente.'
+    }
+    $selectedDataRoot = [string]$receipt.DataRoot
+}
+$storage = Resolve-PcSetupStorage -Configuration $configuration -SelectedDataRoot $selectedDataRoot
 
 function Invoke-PcSetupStep {
     param(
@@ -73,6 +86,7 @@ $baseReport = [ordered]@{
     ProjectSha256 = $projectHash
     Windows      = @{
         ProductName    = $computerInfo.WindowsProductName
+        EditionID      = $windowsRegistry.EditionID
         DisplayVersion = $windowsRegistry.DisplayVersion
         Build          = [int]$windowsRegistry.CurrentBuildNumber
     }
@@ -119,8 +133,6 @@ if ($mode -eq 'Plan') {
 }
 
 if ($configuration.Runtime.RequirePlanBeforeApply) {
-    if (-not (Test-Path -LiteralPath $planReceiptPath -PathType Leaf)) { throw 'Execute bootstrap.ps1 -Plan antes de usar -Apply.' }
-    $receipt = Get-Content -Raw -LiteralPath $planReceiptPath | ConvertFrom-Json
     if ($receipt.ConfigSha256 -ne $configHash -or $receipt.ProjectSha256 -ne $projectHash -or $receipt.DataRoot -ne $storage.DataRoot) {
         throw 'O projeto, a configuracao ou a escolha de armazenamento mudou desde o ultimo plano. Execute -Plan novamente.'
     }
@@ -201,10 +213,7 @@ try {
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Diretorios' -RelativeScript 'scripts\20-directories.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Apply = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Usuarios locais' -RelativeScript 'scripts\30-users.ps1' -Arguments @{ Config = $configuration._ConfigPath; AccountPasswords = $passwords; Apply = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Permissoes NTFS' -RelativeScript 'scripts\40-permissions.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Apply = $true }
-    $baseReport.Steps += Invoke-PcSetupStep -Name 'Pacotes' -RelativeScript 'scripts\60-packages.ps1' -Arguments @{ Config = $configuration._ConfigPath; Apply = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'WSL' -RelativeScript 'scripts\70-wsl.ps1' -Arguments @{ Config = $configuration._ConfigPath; Apply = $true }
-    $baseReport.Steps += Invoke-PcSetupStep -Name 'Personalizacao' -RelativeScript 'scripts\80-personalization.ps1' -Arguments @{ Config = $configuration._ConfigPath; Apply = $true }
-
     $baseReport.Status = 'Completed'
     $baseReport.CompletedAt = (Get-Date).ToString('o')
     Write-RunReport -Report $baseReport | Out-Null

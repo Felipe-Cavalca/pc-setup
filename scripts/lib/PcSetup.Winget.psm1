@@ -7,7 +7,9 @@ function ConvertTo-PcSetupWingetInventory {
         [Parameter(Mandatory)][string[]]$PackageIds,
         [Parameter(Mandatory)][string]$WingetVersion,
         [Parameter(Mandatory)][string]$ConfigSha256,
-        [Parameter(Mandatory)][string]$ProjectSha256
+        [Parameter(Mandatory)][string]$ProjectSha256,
+        [ValidateSet('machine','user')][string]$InstallScope = 'machine',
+        [hashtable]$InstallScopes = @{}
     )
 
     $available = @()
@@ -26,15 +28,18 @@ function ConvertTo-PcSetupWingetInventory {
 
     $records = @()
     foreach ($packageId in $PackageIds) {
+        $scope = if ($InstallScopes.ContainsKey($packageId)) { [string]$InstallScopes[$packageId] } else { $InstallScope }
+        if ($scope -notin @('machine','user')) { throw "Escopo Winget invalido para ${packageId}: $scope" }
         $matches = @($available | Where-Object { $_.PackageId -eq $packageId })
         if ($matches.Count -gt 1) { throw "Winget export retornou mais de uma versao para $packageId." }
         if ($matches.Count -eq 0) {
-            $records += [pscustomobject]@{ PackageId = $packageId; Found = $false; Version = $null; Source = $null }
+            $records += [pscustomobject]@{ PackageId = $packageId; Scope = $scope; Found = $false; Version = $null; Source = $null }
             continue
         }
         $record = $matches[0]
         $records += [pscustomobject]@{
             PackageId = $packageId
+            Scope     = $scope
             Found     = $true
             Version   = $record.Version
             Source    = $record.Source
@@ -47,6 +52,7 @@ function ConvertTo-PcSetupWingetInventory {
         WingetVersion = $WingetVersion
         ConfigSha256  = $ConfigSha256
         ProjectSha256 = $ProjectSha256
+        InstallScope  = $(if ($InstallScopes.Count -gt 0) { 'per-package' } else { $InstallScope })
         Packages      = $records
     }
 }
@@ -57,6 +63,8 @@ function Get-PcSetupWingetInstalledInventory {
         [Parameter(Mandatory)][string[]]$PackageIds,
         [Parameter(Mandatory)][string]$ConfigSha256,
         [Parameter(Mandatory)][string]$ProjectSha256,
+        [ValidateSet('machine','user')][string]$InstallScope = 'machine',
+        [hashtable]$InstallScopes = @{},
         [string]$WingetCommand = 'winget.exe',
         [switch]$RequireAll
     )
@@ -71,7 +79,7 @@ function Get-PcSetupWingetInstalledInventory {
         $exportObject = Get-Content -LiteralPath $temporaryPath -Raw -Encoding UTF8 | ConvertFrom-Json
         $wingetVersion = [string]((& $WingetCommand --version 2>$null | Select-Object -First 1))
         if ([string]::IsNullOrWhiteSpace($wingetVersion)) { $wingetVersion = 'unknown' }
-        $inventory = ConvertTo-PcSetupWingetInventory -ExportObject $exportObject -PackageIds $PackageIds -WingetVersion $wingetVersion.Trim() -ConfigSha256 $ConfigSha256 -ProjectSha256 $ProjectSha256
+        $inventory = ConvertTo-PcSetupWingetInventory -ExportObject $exportObject -PackageIds $PackageIds -WingetVersion $wingetVersion.Trim() -ConfigSha256 $ConfigSha256 -ProjectSha256 $ProjectSha256 -InstallScope $InstallScope -InstallScopes $InstallScopes
         if ($RequireAll) {
             $missing = @($inventory.Packages | Where-Object { -not $_.Found -or [string]::IsNullOrWhiteSpace([string]$_.Version) })
             if ($missing.Count -gt 0) { throw "Winget nao informou a versao instalada de: $($missing.PackageId -join ', ')." }

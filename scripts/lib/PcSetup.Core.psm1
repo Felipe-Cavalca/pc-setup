@@ -41,21 +41,23 @@ function Import-PcSetupConfiguration {
     $configuration = Import-PowerShellDataFile -LiteralPath $resolvedPath
     if (-not ($configuration -is [hashtable])) { throw 'O arquivo de configuracao deve retornar uma hashtable.' }
 
-    foreach ($key in @('SchemaVersion','ProfileName','Execution','Windows','Machine','Storage','Accounts','Features','Packages','WSL','Personalization','Debloat','Recovery','Security','Runtime')) {
+    foreach ($key in @('SchemaVersion','ProfileName','Execution','Reconciliation','Windows','Machine','Storage','Accounts','Agent','Features','Packages','WSL','Personalization','Debloat','Recovery','Security','Runtime')) {
         Assert-PcSetupTableKey -Table $configuration -Key $key -Path 'config'
     }
     $requiredKeys = @{
         Execution      = @('Mode','OnMissingSetting','CollectSecretsBeforeApply','StoreSecretsInRepository')
+        Reconciliation = @('Mode','DisableUnrequestedFeatures','RemoveDisabledAccounts','RemoveUnlistedPackages','RemoveUnlistedDirectories')
         Windows        = @('Edition','TargetVersion','MinimumBuild')
         Machine        = @('ComputerName','PrimaryUser')
         Features       = @('HyperV','WindowsSandbox','VirtualMachinePlatform','WSL','PublicVirtualMachine')
-        Packages       = @('Enabled','PreferredSource','PreferCurrentVersion','Profiles','AllowOfflineFallback','OfflineInstallerDirectory','OfflineManifest','RetryCount')
-        WSL            = @('Update','DefaultVersion','Distribution')
+        Packages       = @('Enabled','PreferredSource','PreferCurrentVersion','InstallScope','Profiles','AllowOfflineFallback','OfflineInstallerDirectory','OfflineManifest','RetryCount')
+        WSL            = @('Update','DefaultVersion','Distribution','Environments')
         Personalization = @('Enabled','WallpaperPath')
-        Debloat        = @('Enabled','Mode','Repository','Release','ArchiveSha256','RequireSha256','RequireConfirmation')
-        Recovery       = @('RequireRestorePointBeforeChanges','Scope','SystemProtectionMustBeEnabled','EnableSystemProtectionAutomatically','FailIfRestorePointUnavailable','AllowExistingRestorePointReuse','AllowSameApplySessionReuse','ProtectDirectScriptExecution')
-        Security       = @('DailyUserMustBeStandard','BackupAclBeforeChanges','ManageBitLocker','BitLockerMode','ReportBitLockerStatus','RequireRecoveryKeyCheck','DemoteDailyUserAutomatically')
-        Runtime        = @('StateDirectory','ReportDirectory','WingetInventoryPath','StopOnError','RequirePlanBeforeApply')
+        Debloat        = @('Enabled','Mode','Repository','Release','ArchiveSha256','Preset','Silent','AppRemovalTarget','RemoveGamingApps','RequireSha256','RequireConfirmation')
+        Recovery       = @('RequireRestorePointBeforeChanges','Scope','SystemProtectionMustBeEnabled','EnableSystemProtectionAutomatically','FailIfRestorePointUnavailable','AllowExistingRestorePointReuse','AllowSameApplySessionReuse','ProtectDirectScriptExecution','UserPhaseReceiptMaxAgeHours')
+        Security       = @('DailyUserMustBeStandard','BackupAclBeforeChanges','ManageBitLocker','BitLockerMode','ReportBitLockerStatus','RequireRecoveryKeyCheck','DemoteDailyUserAutomatically','HyperVAdministratorAccounts')
+        Runtime        = @('StateDirectory','ReportDirectory','UserStateDirectory','UserReportDirectory','WingetInventoryPath','StopOnError','RequirePlanBeforeApply')
+        Agent          = @('Enabled','Environment','DefaultCommand','Isolation','Harness','Workspace','Capabilities','VirtualMachine')
     }
     foreach ($section in $requiredKeys.Keys) {
         foreach ($key in $requiredKeys[$section]) { Assert-PcSetupTableKey -Table $configuration[$section] -Key $key -Path "config.$section" }
@@ -68,6 +70,10 @@ function Import-PcSetupConfiguration {
     if ($configuration.Execution.Mode -notin @('Unattended','Interactive')) { throw 'Execution.Mode deve ser Unattended ou Interactive.' }
     if ($configuration.Execution.OnMissingSetting -ne 'Stop' -or -not $configuration.Execution.CollectSecretsBeforeApply) { throw 'Configuracoes ausentes devem interromper e segredos devem ser coletados antes das alteracoes dependentes.' }
     if ($configuration.Execution.StoreSecretsInRepository -ne $false) { throw 'StoreSecretsInRepository deve permanecer false.' }
+    if ($configuration.Reconciliation.Mode -ne 'Additive') { throw 'Reconciliation.Mode suportado: Additive.' }
+    foreach ($setting in @('DisableUnrequestedFeatures','RemoveDisabledAccounts','RemoveUnlistedPackages','RemoveUnlistedDirectories')) {
+        if ($configuration.Reconciliation[$setting] -ne $false) { throw "Reconciliation.$setting ainda nao e suportado; mantenha false." }
+    }
     if ($configuration.Storage.System.Selection -ne 'CurrentWindowsVolume') { throw 'Storage.System.Selection deve ser CurrentWindowsVolume.' }
     if ($configuration.Storage.Data.Mode -notin @('Adaptive','DirectoryOnSystemVolume')) { throw 'Storage.Data.Mode invalido.' }
     if ($configuration.Storage.Data.SecondaryDiskPolicy -notin @('UseIfAvailable','Ask','Ignore')) { throw 'SecondaryDiskPolicy invalida.' }
@@ -94,6 +100,7 @@ function Import-PcSetupConfiguration {
     if ($configuration.Security.BackupAclBeforeChanges -ne $true) { throw 'BackupAclBeforeChanges deve permanecer true.' }
     if ($configuration.Recovery.AllowExistingRestorePointReuse -ne $false) { throw 'Pontos de outras execucoes nao podem ser reutilizados.' }
     if ($configuration.Recovery.AllowSameApplySessionReuse -ne $true) { throw 'AllowSameApplySessionReuse deve permanecer true para retomadas seguras apos reinicio.' }
+    if ([int]$configuration.Recovery.UserPhaseReceiptMaxAgeHours -lt 1 -or [int]$configuration.Recovery.UserPhaseReceiptMaxAgeHours -gt 24) { throw 'Recovery.UserPhaseReceiptMaxAgeHours deve ficar entre 1 e 24.' }
     if ($configuration.WSL.DefaultVersion -notin @(1, 2)) { throw 'WSL.DefaultVersion deve ser 1 ou 2.' }
     if ($configuration.WSL.ContainsKey('Environments')) {
         if (-not ($configuration.WSL.Environments -is [hashtable])) { throw 'WSL.Environments deve ser uma hashtable.' }
@@ -101,10 +108,10 @@ function Import-PcSetupConfiguration {
             if ([string]$environmentName -notmatch '^[A-Za-z][A-Za-z0-9_-]*$') { throw "Nome de ambiente WSL invalido: $environmentName" }
             $environment = $configuration.WSL.Environments[$environmentName]
             if (-not ($environment -is [hashtable])) { throw "WSL.Environments.$environmentName deve ser uma hashtable." }
-            foreach ($key in @('Enabled','AccountKey','Distribution','Profile')) {
+            foreach ($key in @('Enabled','AccountKey','Distribution','Profile','Default')) {
                 Assert-PcSetupTableKey -Table $environment -Key $key -Path "config.WSL.Environments.$environmentName"
             }
-            if ($environment.AccountKey -notin @('DailyUser','RecoveryAdmin','Codex','God','Public')) { throw "AccountKey invalido no ambiente WSL ${environmentName}: $($environment.AccountKey)" }
+            if ($environment.AccountKey -notin @('DailyUser','RecoveryAdmin','Public')) { throw "AccountKey invalido no ambiente WSL ${environmentName}: $($environment.AccountKey)" }
             if ([string]$environment.Distribution -notmatch '^[A-Za-z0-9._-]+$') { throw "Distribution invalida no ambiente WSL ${environmentName}: $($environment.Distribution)" }
             if ([IO.Path]::IsPathRooted([string]$environment.Profile) -or [string]$environment.Profile -match '(^|[\\/])\.\.([\\/]|$)') { throw "Profile invalido no ambiente WSL ${environmentName}." }
             if ($environment.Enabled -and -not $configuration.Features.WSL) { throw "O ambiente WSL $environmentName esta habilitado, mas Features.WSL esta desabilitado." }
@@ -112,11 +119,17 @@ function Import-PcSetupConfiguration {
         }
     }
     if ($configuration.Packages.PreferredSource -ne 'winget' -or -not $configuration.Packages.PreferCurrentVersion) { throw 'Pacotes devem usar Winget e preferir a versao atual.' }
+    if ($configuration.Packages.InstallScope -notin @('machine','user')) { throw 'Packages.InstallScope deve ser machine ou user.' }
     if ([int]$configuration.Packages.RetryCount -lt 0 -or [int]$configuration.Packages.RetryCount -gt 5) { throw 'Packages.RetryCount deve ficar entre 0 e 5.' }
     if ([string]::IsNullOrWhiteSpace([string]$configuration.Packages.OfflineManifest)) { throw 'Packages.OfflineManifest nao pode ficar vazio.' }
     if (-not $configuration.Runtime.StopOnError -or -not $configuration.Runtime.RequirePlanBeforeApply) { throw 'Runtime deve interromper em erro e exigir plano antes da aplicacao.' }
     if ($configuration.Debloat.Mode -ne 'ReviewThenApply' -or -not $configuration.Debloat.RequireConfirmation) { throw 'Debloat deve permanecer em modo ReviewThenApply com confirmacao.' }
+    if ($configuration.Debloat.Preset -ne 'RunDefaults') { throw 'Debloat.Preset deve ser RunDefaults.' }
+    if (-not ($configuration.Debloat.Silent -is [bool]) -or $configuration.Debloat.Silent -ne $true) { throw 'Debloat.Silent deve ser true para a execucao reproduzivel.' }
+    if ($configuration.Debloat.AppRemovalTarget -ne 'AllUsers') { throw 'Debloat.AppRemovalTarget deve ser AllUsers.' }
+    if (-not ($configuration.Debloat.RemoveGamingApps -is [bool])) { throw 'Debloat.RemoveGamingApps deve ser booleano.' }
     if ([string]::IsNullOrWhiteSpace([string]$configuration.Machine.PrimaryUser)) { throw 'Machine.PrimaryUser nao pode ficar vazio.' }
+    if ([int]$configuration.Windows.MinimumBuild -lt 22000) { throw 'Windows.MinimumBuild deve exigir ao menos uma build do Windows 11.' }
     if (-not [string]::IsNullOrWhiteSpace([string]$configuration.Machine.ComputerName) -and [string]$configuration.Machine.ComputerName -notmatch '^(?!-)[A-Za-z0-9-]{1,15}(?<!-)$') {
         throw 'Machine.ComputerName deve ter ate 15 caracteres, usando letras, numeros ou hifen sem hifen nas extremidades.'
     }
@@ -127,8 +140,12 @@ function Import-PcSetupConfiguration {
         throw 'Machine.PrimaryUser deve ser igual a Accounts.DailyUser.Name.'
     }
 
+    foreach ($legacyAccount in @('Codex','God')) {
+        if ($configuration.Accounts.ContainsKey($legacyAccount)) { throw "Accounts.$legacyAccount foi removida. Agentes devem usar o usuario Linux configurado em Agent." }
+    }
+
     $accountNames = @()
-    foreach ($accountKey in @('DailyUser','RecoveryAdmin','Codex','God','Public')) {
+    foreach ($accountKey in @('DailyUser','RecoveryAdmin','Public')) {
         Assert-PcSetupTableKey -Table $configuration.Accounts -Key $accountKey -Path 'config.Accounts'
         $account = $configuration.Accounts[$accountKey]
         if ($account.Enabled) {
@@ -141,6 +158,43 @@ function Import-PcSetupConfiguration {
         }
     }
 
+    if (-not ($configuration.Agent.Capabilities -is [hashtable])) { throw 'Agent.Capabilities deve ser uma hashtable.' }
+    foreach ($key in @('Network','PersistAgentState','Docker','SSH','Display','GPU','X11','HostSharedMemory','TerminalPassthrough','InheritEnvironment','UpdateCheck','Worktree','SystemdUser','Tailscale','Pictures')) {
+        Assert-PcSetupTableKey -Table $configuration.Agent.Capabilities -Key $key -Path 'config.Agent.Capabilities'
+    }
+    if (-not ($configuration.Agent.Harness -is [hashtable])) { throw 'Agent.Harness deve ser uma hashtable.' }
+    foreach ($key in @('Enabled','PackageManager','Package','Version')) { Assert-PcSetupTableKey -Table $configuration.Agent.Harness -Key $key -Path 'config.Agent.Harness' }
+    if ($configuration.Agent.Harness.PackageManager -ne 'Npm') { throw 'Agent.Harness.PackageManager deve ser Npm.' }
+    if ([string]$configuration.Agent.Harness.Package -notmatch '^@[a-z0-9._-]+/[a-z0-9._-]+$') { throw 'Agent.Harness.Package deve ser um pacote NPM com escopo.' }
+    if ([string]$configuration.Agent.Harness.Version -ne 'latest' -and [string]$configuration.Agent.Harness.Version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw 'Agent.Harness.Version deve ser latest ou uma versao exata.' }
+    if ($configuration.Agent.Enabled -and -not $configuration.Agent.Harness.Enabled) { throw 'O perfil padrao do agente exige Agent.Harness.Enabled.' }
+    if (-not ($configuration.Agent.Workspace -is [hashtable])) { throw 'Agent.Workspace deve ser uma hashtable.' }
+    foreach ($key in @('Mode','DefaultPath')) { Assert-PcSetupTableKey -Table $configuration.Agent.Workspace -Key $key -Path 'config.Agent.Workspace' }
+    if ($configuration.Agent.Workspace.Mode -ne 'SelectedProjectOnly') { throw 'Agent.Workspace.Mode deve ser SelectedProjectOnly.' }
+    if ([string]$configuration.Agent.Workspace.DefaultPath -match "[`r`n]") { throw 'Agent.Workspace.DefaultPath nao pode conter quebra de linha.' }
+    if (-not ($configuration.Agent.VirtualMachine -is [hashtable])) { throw 'Agent.VirtualMachine deve ser uma hashtable.' }
+    foreach ($key in @('Enabled','Name')) { Assert-PcSetupTableKey -Table $configuration.Agent.VirtualMachine -Key $key -Path 'config.Agent.VirtualMachine' }
+    if ($configuration.Agent.Isolation -ne 'AiJail') { throw 'Agent.Isolation deve ser AiJail.' }
+    if ([string]$configuration.Agent.DefaultCommand -notmatch '^[A-Za-z0-9._-]+$') { throw 'Agent.DefaultCommand deve ser apenas o nome de um executavel.' }
+    if ($configuration.Agent.Enabled -and -not $configuration.Features.WSL) { throw 'Agent habilitado exige Features.WSL.' }
+    if ($configuration.Agent.VirtualMachine.Enabled -and -not $configuration.Features.HyperV) { throw 'A VM opcional do agente exige Features.HyperV.' }
+    if ([string]::IsNullOrWhiteSpace([string]$configuration.Agent.VirtualMachine.Name)) { throw 'Agent.VirtualMachine.Name nao pode ficar vazio.' }
+    if (-not $configuration.WSL.Environments.ContainsKey([string]$configuration.Agent.Environment)) { throw 'Agent.Environment deve apontar para um ambiente WSL declarado.' }
+    $agentEnvironment = $configuration.WSL.Environments[[string]$configuration.Agent.Environment]
+    if ([bool]$configuration.Agent.Enabled -ne [bool]$agentEnvironment.Enabled) { throw 'Agent.Enabled deve coincidir com o ambiente WSL do agente.' }
+    if ($agentEnvironment.AccountKey -ne 'DailyUser') { throw 'O ambiente WSL do agente deve pertencer a Accounts.DailyUser.' }
+
+    $hyperVAccountKeys = @()
+    foreach ($accountKey in @($configuration.Security.HyperVAdministratorAccounts)) {
+        $key = [string]$accountKey
+        if ($key -notin @('DailyUser','RecoveryAdmin','Public')) { throw "Conta invalida em Security.HyperVAdministratorAccounts: $key" }
+        if (-not $configuration.Accounts[$key].Enabled) { throw "Security.HyperVAdministratorAccounts referencia uma conta desabilitada: $key" }
+        if ($hyperVAccountKeys -contains $key) { throw "Conta duplicada em Security.HyperVAdministratorAccounts: $key" }
+        $hyperVAccountKeys += $key
+    }
+    if ($hyperVAccountKeys.Count -gt 0 -and -not $configuration.Features.HyperV) { throw 'HyperVAdministratorAccounts exige Features.HyperV.' }
+    $configuration.Security.HyperVAdministratorAccounts = $hyperVAccountKeys
+
     foreach ($profile in @($configuration.Packages.Profiles)) {
         if ($profile -notmatch '^[a-z0-9-]+$') { throw "Nome de perfil de pacotes invalido: $profile" }
     }
@@ -151,8 +205,14 @@ function Import-PcSetupConfiguration {
 
     $configuration['_ConfigPath'] = $resolvedPath
     $configuration['_ProjectRoot'] = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-    foreach ($environment in @(Get-PcSetupWslEnvironments -Configuration $configuration)) {
-        Import-PcSetupWslProfile -Configuration $configuration -Environment $environment | Out-Null
+    $wslEnvironments = @(Get-PcSetupWslEnvironments -Configuration $configuration)
+    foreach ($environment in $wslEnvironments) {
+        $profile = Import-PcSetupWslProfile -Configuration $configuration -Environment $environment
+        if ([bool]$profile.SetAsDefaultUser -ne [bool]$environment.Default) { throw "WSL $($environment.Name): Profile.SetAsDefaultUser deve coincidir com Environment.Default." }
+    }
+    foreach ($group in @($wslEnvironments | Where-Object Enabled | Group-Object WindowsAccount, Distribution)) {
+        $defaults = @($group.Group | Where-Object Default)
+        if ($defaults.Count -ne 1) { throw "Cada distribuicao WSL por conta deve ter exatamente um ambiente Default. Grupo: $($group.Name)" }
     }
     return $configuration
 }
@@ -170,10 +230,13 @@ function Resolve-PcSetupTemplate {
     }
     $programData = $env:ProgramData
     if ([string]::IsNullOrWhiteSpace($programData)) { $programData = Join-Path $SystemRoot 'ProgramData' }
+    $localAppData = $env:LOCALAPPDATA
+    if ([string]::IsNullOrWhiteSpace($localAppData)) { $localAppData = Join-Path $SystemRoot 'Users\Default\AppData\Local' }
 
     return $Value.
         Replace('{SystemRoot}', $SystemRoot.TrimEnd('\')).
         Replace('{ProgramData}', $programData.TrimEnd('\')).
+        Replace('{LocalAppData}', $localAppData.TrimEnd('\')).
         Replace('{PrimaryUser}', [string]$Configuration.Machine.PrimaryUser)
 }
 
@@ -252,7 +315,8 @@ function Resolve-PcSetupStorage {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][hashtable]$Configuration,
-        [hashtable]$Inventory = $null
+        [hashtable]$Inventory = $null,
+        [string]$SelectedDataRoot = ''
     )
 
     if (-not $Inventory) { $Inventory = Get-PcSetupStorageInventory }
@@ -260,6 +324,8 @@ function Resolve-PcSetupStorage {
     $dataConfiguration = $Configuration.Storage.Data
     $selectedVolume = $null
     $dataMode = 'SystemDirectory'
+    $fallback = if ($dataConfiguration.ContainsKey('Root')) { [string]$dataConfiguration.Root } else { [string]$dataConfiguration.SingleDiskFallbackRoot }
+    $fallbackRoot = [IO.Path]::GetFullPath((Resolve-PcSetupTemplate -Value $fallback -Configuration $Configuration -SystemRoot $systemRoot))
 
     if ($Configuration.Storage.System.RequireHealthy) {
         $systemVolume = $Inventory.Volumes | Where-Object { $_.DiskNumber -eq $Inventory.SystemDiskNumber -and $_.DriveLetter -eq $Inventory.SystemDriveLetter } | Select-Object -First 1
@@ -290,7 +356,16 @@ function Resolve-PcSetupStorage {
         }
         elseif ($dataConfiguration.SecondaryDiskPolicy -eq 'Ask') {
             if ($Configuration.Execution.Mode -ne 'Interactive') { throw 'A selecao Ask exige modo Interactive.' }
-            $selectedVolume = Select-PcSetupInteractiveVolume -Candidates $candidates
+            if (-not [string]::IsNullOrWhiteSpace($SelectedDataRoot)) {
+                $normalizedSelection = [IO.Path]::GetFullPath($SelectedDataRoot)
+                if ($normalizedSelection.TrimEnd('\') -ne $fallbackRoot.TrimEnd('\')) {
+                    $selectedVolume = $candidates | Where-Object { ([IO.Path]::GetFullPath([string]$_.Root)).TrimEnd('\') -eq $normalizedSelection.TrimEnd('\') } | Select-Object -First 1
+                    if (-not $selectedVolume) { throw "A escolha de armazenamento do plano nao esta mais disponivel: $normalizedSelection" }
+                }
+            }
+            elseif ($candidates.Count -gt 0) {
+                $selectedVolume = Select-PcSetupInteractiveVolume -Candidates $candidates
+            }
         }
 
         if (-not $selectedVolume -and $candidates.Count -eq 0) {
@@ -309,8 +384,7 @@ function Resolve-PcSetupStorage {
         $dataMode = 'DedicatedVolume'
     }
     else {
-        $fallback = if ($dataConfiguration.ContainsKey('Root')) { [string]$dataConfiguration.Root } else { [string]$dataConfiguration.SingleDiskFallbackRoot }
-        $dataRoot = [IO.Path]::GetFullPath((Resolve-PcSetupTemplate -Value $fallback -Configuration $Configuration -SystemRoot $systemRoot))
+        $dataRoot = $fallbackRoot
         if ($dataRoot.TrimEnd('\') -eq $systemRoot.TrimEnd('\')) { throw 'A raiz de dados nao pode ser a raiz do volume do Windows.' }
     }
 
@@ -385,7 +459,7 @@ function Get-PcSetupAccounts {
     param([Parameter(Mandatory)][hashtable]$Configuration)
 
     $accounts = @()
-    foreach ($key in @('DailyUser','RecoveryAdmin','Codex','God','Public')) {
+    foreach ($key in @('DailyUser','RecoveryAdmin','Public')) {
         $account = $Configuration.Accounts[$key]
         $accounts += [pscustomobject]@{
             Key         = $key
@@ -414,6 +488,7 @@ function Get-PcSetupWslEnvironments {
             WindowsAccount = [string]$account.Name
             Distribution   = [string]$definition.Distribution
             Profile        = [string]$definition.Profile
+            Default        = [bool]$definition.Default
         }
     }
     return $result
@@ -429,7 +504,7 @@ function Import-PcSetupWslProfile {
     $path = Resolve-PcSetupProjectPath -Configuration $Configuration -Value ([string]$Environment.Profile) -SettingName "WSL.Environments.$($Environment.Name).Profile"
     $profile = Import-PowerShellDataFile -LiteralPath $path -ErrorAction Stop
     if (-not ($profile -is [hashtable])) { throw "O perfil WSL deve retornar uma hashtable: $path" }
-    foreach ($key in @('SchemaVersion','LinuxUser','ProjectRoot','Packages')) { Assert-PcSetupTableKey -Table $profile -Key $key -Path "WSL profile $($Environment.Name)" }
+    foreach ($key in @('SchemaVersion','LinuxUser','ProjectRoot','Packages','SetAsDefaultUser')) { Assert-PcSetupTableKey -Table $profile -Key $key -Path "WSL profile $($Environment.Name)" }
     if ($profile.SchemaVersion -ne '1.0') { throw "SchemaVersion WSL nao suportada em $path." }
     if ([string]$profile.LinuxUser -notmatch '^[a-z_][a-z0-9_-]{0,31}$') { throw "LinuxUser invalido em $path." }
     $projectRoot = ([string]$profile.ProjectRoot).Replace('{LinuxUser}', [string]$profile.LinuxUser)
@@ -443,26 +518,95 @@ function Import-PcSetupWslProfile {
     }
     $profile.ProjectRoot = $projectRoot
     $profile.Packages = $packages
+    if (-not $profile.ContainsKey('RequireNoSudo')) { $profile.RequireNoSudo = $false }
+    if (-not $profile.ContainsKey('SharedWith')) { $profile.SharedWith = @() }
+    if (-not $profile.ContainsKey('SharedGroup')) { $profile.SharedGroup = '' }
+    if (-not $profile.ContainsKey('ProjectRootMode')) { $profile.ProjectRootMode = '0755' }
+    if ([string]$profile.ProjectRootMode -notmatch '^[0-7]{3,4}$') { throw "ProjectRootMode invalido no perfil WSL: $path" }
+    if (-not [string]::IsNullOrWhiteSpace([string]$profile.SharedGroup) -and [string]$profile.SharedGroup -notmatch '^[a-z_][a-z0-9_-]{0,31}$') { throw "SharedGroup invalido no perfil WSL: $path" }
+    $sharedUsers = @()
+    foreach ($sharedUser in @($profile.SharedWith)) {
+        $name = [string]$sharedUser
+        if ($name -notmatch '^[a-z_][a-z0-9_-]{0,31}$') { throw "SharedWith invalido no perfil WSL ${path}: $name" }
+        if ($sharedUsers -contains $name) { throw "SharedWith duplicado no perfil WSL ${path}: $name" }
+        $sharedUsers += $name
+    }
+    if ($Configuration.Agent.Enabled -and $Environment.Name -eq [string]$Configuration.Agent.Environment) {
+        $defaultEnvironment = Get-PcSetupWslEnvironments -Configuration $Configuration |
+            Where-Object {
+                $_.Enabled -and $_.Default -and
+                $_.WindowsAccount -eq $Environment.WindowsAccount -and
+                $_.Distribution -eq $Environment.Distribution
+            } |
+            Select-Object -First 1
+        if (-not $defaultEnvironment) { throw "Ambiente WSL padrao ausente para compartilhar o workspace do agente: $path" }
+        $defaultProfile = Import-PcSetupWslProfile -Configuration $Configuration -Environment $defaultEnvironment
+        if ($sharedUsers -notcontains [string]$defaultProfile.LinuxUser) { $sharedUsers += [string]$defaultProfile.LinuxUser }
+    }
+    if ($sharedUsers.Count -gt 0 -and [string]::IsNullOrWhiteSpace([string]$profile.SharedGroup)) { throw "SharedGroup e obrigatorio quando SharedWith for usado: $path" }
+    $profile.SharedWith = $sharedUsers
+    if ($profile.ContainsKey('AiJail')) {
+        if (-not ($profile.AiJail -is [hashtable])) { throw "AiJail deve ser uma hashtable no perfil WSL: $path" }
+        foreach ($key in @('Enabled','Repository','Version','Architecture','Sha256','RequireAssetDigest')) { Assert-PcSetupTableKey -Table $profile.AiJail -Key $key -Path "WSL profile $($Environment.Name).AiJail" }
+        if ($profile.AiJail.Enabled) {
+            if ([string]$profile.AiJail.Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw "Repositorio do ai-jail invalido em $path." }
+            if ([string]$profile.AiJail.Version -ne 'latest' -and [string]$profile.AiJail.Version -notmatch '^\d+\.\d+\.\d+$') { throw "Versao do ai-jail invalida em $path." }
+            if ([string]$profile.AiJail.Architecture -notmatch '^[a-z0-9_]+$') { throw "Arquitetura do ai-jail invalida em $path." }
+            if ($profile.AiJail.Version -ne 'latest' -and [string]$profile.AiJail.Sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw "Versao exata do ai-jail exige SHA-256 em $path." }
+            if ($profile.AiJail.Version -eq 'latest' -and -not [string]::IsNullOrWhiteSpace([string]$profile.AiJail.Sha256)) { throw "AiJail.Sha256 deve ficar vazio com Version=latest em $path." }
+            if ($profile.AiJail.RequireAssetDigest -ne $true) { throw "AiJail.RequireAssetDigest deve permanecer true em $path." }
+            foreach ($requiredPackage in @('bubblewrap','ca-certificates','curl')) {
+                if ($packages -notcontains $requiredPackage) { throw "O perfil ai-jail deve instalar o pacote APT $requiredPackage." }
+            }
+        }
+    }
+    if ($Configuration.Agent.Enabled -and $Environment.Name -eq [string]$Configuration.Agent.Environment -and $Configuration.Agent.Harness.Enabled) {
+        foreach ($requiredPackage in @('nodejs','npm')) {
+            if ($packages -notcontains $requiredPackage) { throw "O perfil do agente deve instalar o pacote APT $requiredPackage." }
+        }
+        $profile['Harness'] = @{
+            Enabled        = [bool]$Configuration.Agent.Harness.Enabled
+            PackageManager = [string]$Configuration.Agent.Harness.PackageManager
+            Package        = [string]$Configuration.Agent.Harness.Package
+            Version        = [string]$Configuration.Agent.Harness.Version
+            Command        = [string]$Configuration.Agent.DefaultCommand
+        }
+    }
     $profile['_ProfilePath'] = $path
     return $profile
+}
+
+function Get-PcSetupPackageDefinitions {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][hashtable]$Configuration)
+
+    $result = @()
+    $seen = @()
+    foreach ($profile in @($Configuration.Packages.Profiles)) {
+        $path = Join-Path $Configuration._ProjectRoot "config\packages\$profile.txt"
+        if (-not (Test-Path -LiteralPath $path)) { throw "Perfil de pacotes nao encontrado: $path" }
+        foreach ($line in @(Get-Content -LiteralPath $path)) {
+            $entry = $line.Trim()
+            if (-not $entry -or $entry.StartsWith('#')) { continue }
+            $parts = $entry -split '\|', 2
+            $id = $parts[0].Trim()
+            $scope = if ($parts.Count -eq 2) { $parts[1].Trim().ToLowerInvariant() } else { [string]$Configuration.Packages.InstallScope }
+            if ($id -notmatch '^[A-Za-z0-9._-]+$') { throw "ID winget invalido em ${path}: $id" }
+            if ($scope -notin @('machine','user')) { throw "Escopo winget invalido em ${path}: $scope" }
+            if ($seen -notcontains $id) {
+                $result += [pscustomobject]@{ PackageId = $id; Scope = $scope; Profile = [string]$profile }
+                $seen += $id
+            }
+        }
+    }
+    return $result
 }
 
 function Get-PcSetupPackageIds {
     [CmdletBinding()]
     param([Parameter(Mandatory)][hashtable]$Configuration)
 
-    $result = @()
-    foreach ($profile in @($Configuration.Packages.Profiles)) {
-        $path = Join-Path $Configuration._ProjectRoot "config\packages\$profile.txt"
-        if (-not (Test-Path -LiteralPath $path)) { throw "Perfil de pacotes nao encontrado: $path" }
-        foreach ($line in @(Get-Content -LiteralPath $path)) {
-            $id = $line.Trim()
-            if (-not $id -or $id.StartsWith('#')) { continue }
-            if ($id -notmatch '^[A-Za-z0-9._-]+$') { throw "ID winget invalido em ${path}: $id" }
-            if ($result -notcontains $id) { $result += $id }
-        }
-    }
-    return $result
+    return @(Get-PcSetupPackageDefinitions -Configuration $Configuration | ForEach-Object PackageId)
 }
 
 function Write-PcSetupJson {
@@ -476,6 +620,30 @@ function Write-PcSetupJson {
     if (-not (Test-Path -LiteralPath $directory)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
     $InputObject | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding UTF8
     return $Path
+}
+
+function Assert-PcSetupCompletedApplyReport {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$Configuration,
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw 'A fase de usuario exige o relatorio concluido da mesma aplicacao do Windows.'
+    }
+    $report = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    $configHash = (Get-FileHash -LiteralPath $Configuration._ConfigPath -Algorithm SHA256).Hash
+    $projectHash = Get-PcSetupProjectFingerprint -Configuration $Configuration
+    $completedAt = [datetimeoffset]::MinValue
+    if (-not [datetimeoffset]::TryParse([string]$report.CompletedAt, [ref]$completedAt)) { throw 'O relatorio de aplicacao nao possui data de conclusao valida.' }
+    $receiptAge = [datetimeoffset]::Now - $completedAt
+    if ($report.Status -ne 'Completed' -or $report.ConfigSha256 -ne $configHash -or $report.ProjectSha256 -ne $projectHash -or
+        -not $report.Recovery -or $report.Recovery.Validated -ne $true -or -not $report.Recovery.SequenceNumber -or
+        $receiptAge.TotalHours -lt 0 -or $receiptAge.TotalHours -gt [int]$Configuration.Recovery.UserPhaseReceiptMaxAgeHours) {
+        throw 'O relatorio informado nao comprova uma aplicacao Windows concluida e protegida para esta configuracao.'
+    }
+    return $report
 }
 
 function Get-PcSetupProjectFingerprint {
@@ -507,4 +675,4 @@ function Get-PcSetupProjectFingerprint {
     finally { $sha.Dispose() }
 }
 
-Export-ModuleMember -Function Get-PcSetupExecutionMode, Test-PcSetupAdministrator, Assert-PcSetupAdministrator, Import-PcSetupConfiguration, Resolve-PcSetupTemplate, Get-PcSetupStorageInventory, Resolve-PcSetupStorage, Get-PcSetupConfiguredPaths, Get-PcSetupRuntimePath, Resolve-PcSetupProjectPath, Get-PcSetupAccounts, Get-PcSetupWslEnvironments, Import-PcSetupWslProfile, Get-PcSetupPackageIds, Write-PcSetupJson, Get-PcSetupProjectFingerprint
+Export-ModuleMember -Function Get-PcSetupExecutionMode, Test-PcSetupAdministrator, Assert-PcSetupAdministrator, Import-PcSetupConfiguration, Resolve-PcSetupTemplate, Get-PcSetupStorageInventory, Resolve-PcSetupStorage, Get-PcSetupConfiguredPaths, Get-PcSetupRuntimePath, Resolve-PcSetupProjectPath, Get-PcSetupAccounts, Get-PcSetupWslEnvironments, Import-PcSetupWslProfile, Get-PcSetupPackageDefinitions, Get-PcSetupPackageIds, Write-PcSetupJson, Assert-PcSetupCompletedApplyReport, Get-PcSetupProjectFingerprint

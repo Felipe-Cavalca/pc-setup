@@ -2,15 +2,14 @@
 [CmdletBinding()]
 param(
     [string]$Config = (Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1'),
+    [string]$WindowsApplyReport = '',
     [switch]$Plan,
     [switch]$Apply
 )
 
 $ErrorActionPreference = 'Stop'
 $coreModule = Join-Path $PSScriptRoot 'lib\PcSetup.Core.psm1'
-$recoveryModule = Join-Path $PSScriptRoot 'lib\PcSetup.Recovery.psm1'
 Import-Module $coreModule -Force
-Import-Module $recoveryModule -Force
 
 $mode = Get-PcSetupExecutionMode -Plan:$Plan -Apply:$Apply
 $configuration = Import-PcSetupConfiguration -Path $Config
@@ -28,9 +27,14 @@ if ($mode -eq 'Plan') {
     return [pscustomobject]@{ Step = 'Personalization'; Mode = $mode; Enabled = $true; Source = $sourcePath; Action = 'SetWallpaperForCurrentUser' }
 }
 
-Assert-PcSetupAdministrator
-$null = Enter-PcSetupProtectedScript -EntryPoint $MyInvocation.MyCommand.Name
-$stateRoot = Get-PcSetupRuntimePath -Configuration $configuration -Key 'StateDirectory'
+if ($env:USERNAME -ne [string]$configuration.Accounts.DailyUser.Name) {
+    throw "A personalizacao deve ser aplicada na sessao da conta diaria $($configuration.Accounts.DailyUser.Name). Usuario atual: $env:USERNAME."
+}
+$applyReport = Assert-PcSetupCompletedApplyReport -Configuration $configuration -Path $WindowsApplyReport
+$configHash = (Get-FileHash -LiteralPath $configuration._ConfigPath -Algorithm SHA256).Hash
+$projectHash = Get-PcSetupProjectFingerprint -Configuration $configuration
+
+$stateRoot = Get-PcSetupRuntimePath -Configuration $configuration -Key 'UserStateDirectory'
 $assetDirectory = Join-Path $stateRoot 'assets'
 New-Item -ItemType Directory -Path $assetDirectory -Force | Out-Null
 $targetPath = Join-Path $assetDirectory ('wallpaper' + [IO.Path]::GetExtension($sourcePath))
@@ -53,5 +57,18 @@ namespace PcSetup {
 }
 $updated = [PcSetup.NativeMethods]::SystemParametersInfo(20, 0, $targetPath, 3)
 if (-not $updated) { throw 'O arquivo foi configurado, mas o Windows nao confirmou a atualizacao imediata do plano de fundo.' }
+$configuredWallpaper = [string](Get-ItemProperty -LiteralPath 'HKCU:\Control Panel\Desktop' -Name Wallpaper -ErrorAction Stop).Wallpaper
+if ($configuredWallpaper -ne $targetPath) { throw 'O registro do usuario nao confirmou o plano de fundo aplicado.' }
+if ((Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $targetPath -Algorithm SHA256).Hash) {
+    throw 'A copia local do plano de fundo diverge do arquivo configurado.'
+}
 
-[pscustomobject]@{ Step = 'Personalization'; Mode = $mode; Enabled = $true; Source = $sourcePath; Target = $targetPath; Action = 'Completed' }
+$result = [pscustomobject]@{
+    Step = 'Personalization'; Mode = $mode; Enabled = $true; User = $env:USERNAME
+    Source = $sourcePath; Target = $targetPath; Action = 'Completed'; WindowsApplyReport = $WindowsApplyReport
+    ConfigSha256 = $configHash; ProjectSha256 = $projectHash; CompletedAt = (Get-Date).ToString('o')
+}
+$reportPath = Join-Path (Get-PcSetupRuntimePath -Configuration $configuration -Key 'UserReportDirectory') ('personalization-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json')
+Write-PcSetupJson -InputObject $result -Path $reportPath | Out-Null
+Write-Host "[RELATORIO] $reportPath" -ForegroundColor Green
+$result

@@ -21,6 +21,10 @@ function New-TestVolume([string]$Drive, [int]$Disk, [bool]$Removable = $false, [
 }
 
 $configuration = Import-PcSetupConfiguration -Path (Join-Path $root 'config\machine.psd1')
+Assert-Equal 'Interactive' $configuration.Execution.Mode 'O perfil Felipe deve permitir a pergunta de armazenamento.'
+Assert-Equal 'Ask' $configuration.Storage.Data.SecondaryDiskPolicy 'O perfil Felipe deve perguntar antes de usar o segundo disco.'
+$configuration.Execution.Mode = 'Unattended'
+$configuration.Storage.Data.SecondaryDiskPolicy = 'UseIfAvailable'
 $systemVolume = New-TestVolume -Drive C -Disk 0
 $systemDisk = [pscustomobject]@{ Number = 0; IsRemovable = $false; HealthStatus = 'Healthy' }
 $dataDisk = [pscustomobject]@{ Number = 1; IsRemovable = $false; HealthStatus = 'Healthy' }
@@ -31,6 +35,15 @@ Assert-Equal 'DedicatedVolume' $single.DataMode 'O modo deve indicar volume dedi
 
 $fallback = Resolve-PcSetupStorage -Configuration $configuration -Inventory (New-TestInventory -Volumes @($systemVolume) -Disks @($systemDisk))
 Assert-Equal 'C:\Dados' $fallback.DataRoot 'Sem segundo disco deve usar a pasta no volume do Windows.'
+
+$askConfiguration = Import-PcSetupConfiguration -Path (Join-Path $root 'config\machine.psd1')
+$reusedSecondDisk = Resolve-PcSetupStorage -Configuration $askConfiguration -SelectedDataRoot 'D:\' -Inventory (New-TestInventory -Volumes @($systemVolume, (New-TestVolume -Drive D -Disk 1)) -Disks @($systemDisk, $dataDisk))
+Assert-Equal 'D:\' $reusedSecondDisk.DataRoot 'O Apply deve reutilizar a escolha do segundo disco feita no plano.'
+$reusedFallback = Resolve-PcSetupStorage -Configuration $askConfiguration -SelectedDataRoot 'C:\Dados' -Inventory (New-TestInventory -Volumes @($systemVolume, (New-TestVolume -Drive D -Disk 1)) -Disks @($systemDisk, $dataDisk))
+Assert-Equal 'C:\Dados' $reusedFallback.DataRoot 'O Apply deve reutilizar a escolha de ficar no disco do Windows.'
+Assert-Throws -Pattern 'nao esta mais disponivel' -Message 'Uma escolha de disco desaparecida deve interromper.' -Action {
+    Resolve-PcSetupStorage -Configuration $askConfiguration -SelectedDataRoot 'E:\' -Inventory (New-TestInventory -Volumes @($systemVolume, (New-TestVolume -Drive D -Disk 1)) -Disks @($systemDisk, $dataDisk)) | Out-Null
+}
 
 Assert-Throws -Pattern 'mais de um volume' -Message 'Multiplos candidatos devem interromper.' -Action {
     Resolve-PcSetupStorage -Configuration $configuration -Inventory (New-TestInventory -Volumes @($systemVolume, (New-TestVolume D 1), (New-TestVolume E 2)) -Disks @($systemDisk, $dataDisk, [pscustomobject]@{ Number = 2; IsRemovable = $false })) | Out-Null

@@ -69,7 +69,7 @@ Depois de chegar à Área de Trabalho:
 6. executar `INSTALAR.cmd` e aceitar o UAC;
 7. conferir o plano e confirmar somente se disco, usuários, recursos e programas estiverem corretos.
 
-Se o script solicitar reinício, reinicie e clique em `INSTALAR.cmd` novamente. Ele retoma a aplicação e executa a validação final. Os detalhes de execução, retomada e relatórios estão no [`README.md` principal](../README.md).
+Se o script solicitar reinício, reinicie e clique em `INSTALAR.cmd` novamente. Ele retoma a aplicação, conclui os ambientes WSL habilitados e executa as validações finais. Os detalhes de execução, retomada e relatórios estão no [`README.md` principal](../README.md).
 
 ## Configuração por máquina
 
@@ -89,7 +89,7 @@ Configurações podem ficar no Git; senhas, tokens, chaves, instaladores e dados
 
 O validador da mídia é somente leitura. Ele verifica a estrutura básica do instalador e reprova um `autounattend.xml` que contenha seleção de imagem/disco, partições, usuários, senhas, chave de produto, comandos ou arquivos embutidos.
 
-O `pc-setup` mostra o plano antes de alterar o Windows. A aplicação só começa depois de criar e consultar um ponto de restauração obrigatório. O BitLocker permanece sem configuração automática e o debloat fica separado e desabilitado.
+O `pc-setup` mostra o plano antes de alterar o Windows. A aplicação só começa depois de criar e consultar um ponto de restauração obrigatório. O BitLocker permanece sem configuração automática e o debloat configurado fica em uma etapa separada com confirmação própria.
 
 ## Decisões e testes
 

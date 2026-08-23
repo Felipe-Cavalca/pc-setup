@@ -1,6 +1,0 @@
-# C:\Users\Codex\.codex\config.toml
-sandbox_mode = "workspace-write"
-approval_policy = "on-request"
-
-[windows]
-sandbox = "elevated"

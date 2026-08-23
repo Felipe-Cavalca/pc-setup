@@ -22,15 +22,16 @@ $summary = [pscustomobject]@{
     Enabled    = [bool]$debloat.Enabled
     Repository = [string]$debloat.Repository
     Release    = [string]$debloat.Release
-    Action     = if ($debloat.Enabled) { 'ReviewThenApply' } else { 'None' }
+    Preset     = [string]$debloat.Preset
+    Action     = if ($debloat.Enabled) { "$($debloat.Preset):$($debloat.AppRemovalTarget)" } else { 'None' }
 }
 
 if (-not $debloat.Enabled) {
-    Write-Host '[IGNORADO] Debloat desabilitado por padrao. O Windows permanece com o comportamento original.'
+    Write-Host '[IGNORADO] Debloat desabilitado neste perfil. O Windows permanece com o comportamento original.'
     return $summary
 }
 if ($mode -eq 'Plan') {
-    Write-Host "[PLANO] Baixar $($debloat.Repository) $($debloat.Release), validar SHA-256 e abrir o modo interativo para revisao."
+    Write-Host "[PLANO] Baixar $($debloat.Repository) $($debloat.Release), validar SHA-256 e executar $($debloat.Preset) para $($debloat.AppRemovalTarget). RemoveGamingApps=$([bool]$debloat.RemoveGamingApps)."
     return $summary
 }
 if (-not $ConfirmReviewed) { throw 'Debloat exige -ConfirmReviewed depois da leitura de docs\DEBLOAT.md.' }
@@ -54,8 +55,10 @@ try {
     if (-not $scriptFile) { throw 'Win11Debloat.ps1 nao foi encontrado no arquivo validado.' }
     Get-ChildItem -LiteralPath $scriptFile.Directory.FullName -Recurse -File | Unblock-File
 
-    Write-Host '[REVISAO] O Win11Debloat sera aberto sem preset silencioso. Escolha conscientemente o que aplicar.' -ForegroundColor Yellow
-    & $scriptFile.FullName
+    $arguments = @('-RunDefaults', '-Silent', '-AppRemovalTarget', [string]$debloat.AppRemovalTarget)
+    if ($debloat.RemoveGamingApps) { $arguments += '-RemoveGamingApps' }
+    Write-Host "[APLICAR] Win11Debloat $($debloat.Preset), alvo $($debloat.AppRemovalTarget), RemoveGamingApps=$([bool]$debloat.RemoveGamingApps)." -ForegroundColor Yellow
+    & $scriptFile.FullName @arguments
     if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "Win11Debloat terminou com codigo $LASTEXITCODE." }
 }
 finally {
