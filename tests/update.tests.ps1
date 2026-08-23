@@ -23,5 +23,7 @@ Assert-True ($update -match '90-user-profile\.ps1' -and $update -match 'pacotes,
 Assert-True ($update -match 'Remove-Item -LiteralPath \$reconcileStatePath -Force') 'O estado de retomada deve ser removido depois da reconciliacao.'
 Assert-True ($update -notmatch 'Read-Host\s+.*Quer reconciliar') 'O WSL nao deve pedir uma segunda confirmacao depois da aplicacao do Windows.'
 Assert-True ($assisted -match '\[switch\]\$NoPause' -and $assisted -match "ValidateSet\('INSTALAR\.cmd','ATUALIZAR\.cmd'\)") 'O fluxo protegido deve suportar composicao sem perder retomada apos reinicio.'
+Assert-True ($assisted -match 'Write-PcSetupFailureDiagnostic' -and $assisted -match 'last-error\.json' -and $assisted -match 'ScriptStackTrace') 'O processo elevado deve persistir a mensagem e o contexto da falha.'
+Assert-True ($update -match 'Get-PcSetupWindowsFailureDiagnostic' -and $update -match 'Detalhe:.*failure\.Message' -and $update -match 'Diagnostico:.*failure\.Path') 'O orquestrador deve recuperar e mostrar o erro do processo elevado na janela principal.'
 
 Write-Host 'PASS: atualizador idempotente e fluxo de retomada.' -ForegroundColor Green

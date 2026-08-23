@@ -31,6 +31,43 @@ function Get-CompletedWindowsApplyReport {
     return [pscustomobject]@{ Path = $reportFile.FullName; Report = $report }
 }
 
+function Get-PcSetupWindowsFailureDiagnostic {
+    param(
+        [Parameter(Mandatory)][hashtable]$Configuration,
+        [Parameter(Mandatory)][datetime]$NotBefore
+    )
+
+    $systemRoot = [IO.Path]::GetPathRoot($env:SystemRoot)
+    $stateDirectory = Get-PcSetupRuntimePath -Configuration $Configuration -Key 'StateDirectory' -SystemRoot $systemRoot
+    $lastErrorPath = Join-Path $stateDirectory 'last-error.json'
+    if (Test-Path -LiteralPath $lastErrorPath -PathType Leaf) {
+        $lastErrorFile = Get-Item -LiteralPath $lastErrorPath
+        if ($lastErrorFile.LastWriteTime -ge $NotBefore.AddSeconds(-5)) {
+            try {
+                $diagnostic = Get-Content -LiteralPath $lastErrorPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if (-not [string]::IsNullOrWhiteSpace([string]$diagnostic.Message)) {
+                    return [pscustomobject]@{ Message = [string]$diagnostic.Message; Path = $lastErrorPath }
+                }
+            }
+            catch { }
+        }
+    }
+
+    $reportDirectory = Get-PcSetupRuntimePath -Configuration $Configuration -Key 'ReportDirectory' -SystemRoot $systemRoot
+    foreach ($reportFile in @(Get-ChildItem -LiteralPath $reportDirectory -Filter 'pc-setup-apply-*.json' -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -ge $NotBefore.AddSeconds(-5) } |
+        Sort-Object LastWriteTime -Descending)) {
+        try {
+            $report = Get-Content -LiteralPath $reportFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($report.Status -eq 'Failed' -and -not [string]::IsNullOrWhiteSpace([string]$report.Error)) {
+                return [pscustomobject]@{ Message = [string]$report.Error; Path = $reportFile.FullName }
+            }
+        }
+        catch { }
+    }
+    return $null
+}
+
 try {
     [Console]::Title = "pc-setup - $operation e reconciliacao"
     Set-Location -LiteralPath $root
@@ -90,6 +127,7 @@ try {
         Write-Host '[RETOMADA] O Windows ja foi aplicado e validado. Retomando pacotes, personalizacao e WSL da conta diaria.' -ForegroundColor Yellow
     }
     else {
+        $windowsStartedAt = Get-Date
         & $windowsPowerShell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $startPath -Config $configuration._ConfigPath -NoPause -LauncherName $LauncherName
         $windowsExitCode = $LASTEXITCODE
         if ($windowsExitCode -eq 2) {
@@ -100,7 +138,13 @@ try {
             Write-Host "Reinicie o Windows e execute $LauncherName novamente para continuar." -ForegroundColor Yellow
             exit 0
         }
-        if ($windowsExitCode -ne 0) { throw "A reconciliacao do Windows falhou com codigo $windowsExitCode." }
+        if ($windowsExitCode -ne 0) {
+            $failure = Get-PcSetupWindowsFailureDiagnostic -Configuration $configuration -NotBefore $windowsStartedAt
+            if ($failure) {
+                throw "A reconciliacao do Windows falhou com codigo $windowsExitCode.`nDetalhe: $($failure.Message)`nDiagnostico: $($failure.Path)"
+            }
+            throw "A reconciliacao do Windows falhou com codigo $windowsExitCode e nao produziu um diagnostico legivel."
+        }
 
         $completedApply = Get-CompletedWindowsApplyReport -Configuration $configuration
         if (-not $completedApply) { throw 'O Windows terminou sem um relatorio Apply concluido e validado para esta versao do projeto.' }

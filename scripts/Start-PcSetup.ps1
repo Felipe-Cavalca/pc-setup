@@ -27,6 +27,37 @@ function Wait-PcSetupExit {
     [void](Read-Host 'Pressione ENTER para fechar')
 }
 
+function Write-PcSetupFailureDiagnostic {
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$ErrorRecord,
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    try {
+        $directory = Split-Path -Parent $Path
+        if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+            New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        }
+        $diagnostic = [ordered]@{
+            SchemaVersion    = 1
+            OccurredAt       = (Get-Date).ToString('o')
+            Operation        = $operation
+            LauncherName     = $LauncherName
+            Message          = $ErrorRecord.Exception.Message
+            FullyQualifiedId = $ErrorRecord.FullyQualifiedErrorId
+            Category         = [string]$ErrorRecord.CategoryInfo
+            Position         = $ErrorRecord.InvocationInfo.PositionMessage
+            ScriptStackTrace = $ErrorRecord.ScriptStackTrace
+        }
+        $diagnostic | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Path -Encoding UTF8
+        return $true
+    }
+    catch {
+        Write-Warning "Nao foi possivel gravar o diagnostico da falha: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 if (-not (Test-Administrator)) {
     try {
         $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Config `"$configPath`" -LauncherName $LauncherName"
@@ -41,6 +72,7 @@ if (-not (Test-Administrator)) {
     }
 }
 
+$lastErrorPath = Join-Path $env:ProgramData 'pc-setup\last-error.json'
 try {
     [Console]::Title = "pc-setup - $operation do Windows"
     Set-Location -LiteralPath $root
@@ -50,6 +82,8 @@ try {
     $configuration = Import-PcSetupConfiguration -Path $configPath
     $systemRoot = [IO.Path]::GetPathRoot($env:SystemRoot)
     $stateDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'StateDirectory' -SystemRoot $systemRoot
+    $lastErrorPath = Join-Path $stateDirectory 'last-error.json'
+    if (Test-Path -LiteralPath $lastErrorPath -PathType Leaf) { Remove-Item -LiteralPath $lastErrorPath -Force -ErrorAction SilentlyContinue }
     $applyStatePath = Join-Path $stateDirectory 'apply-state.json'
 
     Clear-Host
@@ -110,9 +144,12 @@ try {
     exit $verificationExitCode
 }
 catch {
+    $failure = $_
+    $diagnosticWritten = Write-PcSetupFailureDiagnostic -ErrorRecord $failure -Path $lastErrorPath
     Write-Host ''
     Write-Host 'O pc-setup foi interrompido com seguranca.' -ForegroundColor Red
-    Write-Host $_.Exception.Message -ForegroundColor Red
+    Write-Host $failure.Exception.Message -ForegroundColor Red
+    if ($diagnosticWritten) { Write-Host "Diagnostico: $lastErrorPath" -ForegroundColor Yellow }
     Write-Host "Corrija o item informado e clique em $LauncherName novamente." -ForegroundColor Yellow
     Wait-PcSetupExit
     exit 1
