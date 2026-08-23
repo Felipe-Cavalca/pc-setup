@@ -72,7 +72,7 @@ pcsetup_resolve_github_release_asset() {
 
   resolved_sha256="${asset_digest#sha256:}"
   if [[ -n $configured_sha256 ]]; then
-    if [[ -n $resolved_sha256 && ${configured_sha256,,} != ${resolved_sha256,,} ]]; then
+    if [[ -n $resolved_sha256 && "${configured_sha256,,}" != "${resolved_sha256,,}" ]]; then
       printf 'Configured and published SHA-256 differ for %s.\n' "$asset_name" >&2
       return 1
     fi
