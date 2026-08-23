@@ -1,7 +1,7 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$Config = (Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1'),
+    [string]$Config = '',
     [switch]$NoPause,
     [ValidateSet('INSTALAR.cmd','ATUALIZAR.cmd')]
     [string]$LauncherName = 'INSTALAR.cmd'
@@ -9,6 +9,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $root 'config\machine.psd1' }
 $configPath = [IO.Path]::GetFullPath($Config)
 $bootstrapPath = Join-Path $root 'bootstrap.ps1'
 $verifyPath = Join-Path $root 'verify.ps1'

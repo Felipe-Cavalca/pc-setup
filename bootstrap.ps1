@@ -1,12 +1,13 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$Config = (Join-Path $PSScriptRoot 'config\machine.psd1'),
+    [string]$Config = '',
     [switch]$Plan,
     [switch]$Apply
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $PSScriptRoot 'config\machine.psd1' }
 $coreModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Core.psm1'
 $recoveryModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Recovery.psm1'
 Import-Module $coreModule -Force

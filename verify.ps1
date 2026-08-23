@@ -1,11 +1,12 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$Config = (Join-Path $PSScriptRoot 'config\machine.psd1'),
+    [string]$Config = '',
     [string]$ReportPath = ''
 )
 
 $ErrorActionPreference = 'Continue'
+if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $PSScriptRoot 'config\machine.psd1' }
 $coreModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Core.psm1'
 $wslModule = Join-Path $PSScriptRoot 'wsl\PcSetup.Wsl.psm1'
 Import-Module $coreModule -Force

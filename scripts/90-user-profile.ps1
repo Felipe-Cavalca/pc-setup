@@ -1,11 +1,12 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$Config = (Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1'),
+    [string]$Config = '',
     [Parameter(Mandatory)][string]$WindowsApplyReport
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1' }
 Import-Module (Join-Path $PSScriptRoot 'lib\PcSetup.Core.psm1') -Force
 $configuration = Import-PcSetupConfiguration -Path $Config
 if ($env:USERNAME -ne [string]$configuration.Accounts.DailyUser.Name) {

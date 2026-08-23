@@ -1,13 +1,14 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$Config = (Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1'),
+    [string]$Config = '',
     [string]$WindowsApplyReport = '',
     [switch]$Plan,
     [switch]$Apply
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1' }
 $coreModule = Join-Path $PSScriptRoot 'lib\PcSetup.Core.psm1'
 Import-Module $coreModule -Force
 

@@ -1,7 +1,8 @@
 #requires -Version 5.1
 [CmdletBinding()]
-param([string]$Config = (Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1'))
+param([string]$Config = '')
 
+if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1' }
 $coreModule = Join-Path $PSScriptRoot 'lib\PcSetup.Core.psm1'
 Import-Module $coreModule -Force
 $configuration = Import-PcSetupConfiguration -Path $Config

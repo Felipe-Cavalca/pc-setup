@@ -1,13 +1,14 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$Config = (Join-Path (Split-Path -Parent $PSScriptRoot) 'config\machine.psd1'),
+    [string]$Config = '',
     [ValidateSet('INSTALAR.cmd','ATUALIZAR.cmd')]
     [string]$LauncherName = 'ATUALIZAR.cmd'
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $root 'config\machine.psd1' }
 $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $startPath = Join-Path $PSScriptRoot 'Start-PcSetup.ps1'
 $wslBootstrapPath = Join-Path $root 'wsl\bootstrap.ps1'
