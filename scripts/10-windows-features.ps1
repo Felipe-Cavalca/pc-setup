@@ -52,8 +52,12 @@ foreach ($key in $featureMap.Keys) {
 
     Write-Host "[APLICAR] Habilitando $featureName..." -ForegroundColor Cyan
     $enabled = Enable-WindowsOptionalFeature -Online -FeatureName $featureName -All -NoRestart -ErrorAction Stop
-    if ($enabled.RestartNeeded) { $restartRequired = $true }
-    $results += [pscustomobject]@{ Name = $featureName; Requested = $true; State = [string]$enabled.State; Action = 'Enabled' }
+    $featureAfterApply = Get-WindowsOptionalFeature -Online -FeatureName $featureName -ErrorAction Stop
+    if ($featureAfterApply.State -notin @('Enabled', 'EnablePending')) {
+        throw "$featureName permaneceu no estado $($featureAfterApply.State) depois da tentativa de habilitacao."
+    }
+    if ($enabled.RestartNeeded -or $featureAfterApply.State -eq 'EnablePending') { $restartRequired = $true }
+    $results += [pscustomobject]@{ Name = $featureName; Requested = $true; State = [string]$featureAfterApply.State; Action = 'Enabled' }
 }
 
 [pscustomobject]@{

@@ -184,7 +184,7 @@ try {
         Resumed        = $isResume
     }
 
-    if (-not $isResume -or $applyState.Stage -eq 'Starting') {
+    if (-not $isResume -or $applyState.Stage -in @('Starting', 'RestartRequired')) {
         $machine = Invoke-PcSetupStep -Name 'Identidade da maquina' -RelativeScript 'scripts\05-machine.ps1' -Arguments @{ Config = $configuration._ConfigPath; Apply = $true }
         $baseReport.Steps += $machine
         $features = Invoke-PcSetupStep -Name 'Recursos do Windows' -RelativeScript 'scripts\10-windows-features.ps1' -Arguments @{ Config = $configuration._ConfigPath; Apply = $true }

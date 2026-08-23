@@ -54,6 +54,21 @@ function Get-PcSetupWindowsFailureDiagnostic {
     }
 
     $reportDirectory = Get-PcSetupRuntimePath -Configuration $Configuration -Key 'ReportDirectory' -SystemRoot $systemRoot
+    foreach ($reportFile in @(Get-ChildItem -LiteralPath $reportDirectory -Filter 'verify-*.json' -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -ge $NotBefore.AddSeconds(-5) } |
+        Sort-Object LastWriteTime -Descending)) {
+        try {
+            $report = Get-Content -LiteralPath $reportFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            $failedChecks = @($report.Checks | Where-Object Status -eq 'FAIL')
+            if ($failedChecks.Count -gt 0) {
+                $failedDetails = @($failedChecks | ForEach-Object { "$($_.Name): $($_.Detail)" })
+                $message = "A validacao final encontrou $($failedChecks.Count) falha(s):`n- $($failedDetails -join "`n- ")"
+                return [pscustomobject]@{ Message = $message; Path = $reportFile.FullName }
+            }
+        }
+        catch { }
+    }
+
     foreach ($reportFile in @(Get-ChildItem -LiteralPath $reportDirectory -Filter 'pc-setup-apply-*.json' -File -ErrorAction SilentlyContinue |
         Where-Object { $_.LastWriteTime -ge $NotBefore.AddSeconds(-5) } |
         Sort-Object LastWriteTime -Descending)) {

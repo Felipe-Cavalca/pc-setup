@@ -16,6 +16,8 @@ Assert-Contains $bootstrap '\$baseReport\.Recovery\s*=' 'O Apply deve registrar 
 Assert-Contains $verify 'Configuracao aplicada' 'O verify deve comparar a configuracao aplicada.'
 Assert-Contains $verify 'Versao do projeto aplicada' 'O verify deve detectar mudanca do projeto apos o Apply.'
 Assert-Contains $verify 'FileSystemRights\]\$grant\.Rights' 'O verify deve validar os direitos exatos das ACLs.'
+Assert-Contains $verify 'allowedRights.+FileSystemRights\]::Synchronize' 'O verify deve aceitar apenas o bit Synchronize acrescentado canonicamente pelo Windows.'
+Assert-Contains $verify 'hasRequiredRights[\s\S]+hasOnlyAllowedRights' 'O verify deve exigir os direitos configurados sem aceitar privilegios adicionais.'
 Assert-Contains $verify 'controle total explicito e herdavel' 'O verify deve validar tambem as regras de SYSTEM e Administradores.'
 Assert-Contains $verify "Name 'Pacotes Winget'.+fase da conta diaria" 'O verify de maquina deve encaminhar a validacao Winget para a fase correta.'
 Assert-Contains $verify 'Get-PcSetupWslDefaultUser' 'O verify deve conferir o usuario padrao do WSL.'

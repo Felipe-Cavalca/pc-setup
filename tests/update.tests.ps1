@@ -8,6 +8,8 @@ $installLauncher = Get-Content -LiteralPath (Join-Path $root 'INSTALAR.cmd') -Ra
 $updateLauncher = Get-Content -LiteralPath (Join-Path $root 'ATUALIZAR.cmd') -Raw
 $update = Get-Content -LiteralPath (Join-Path $root 'scripts\Start-PcSetupUpdate.ps1') -Raw
 $assisted = Get-Content -LiteralPath (Join-Path $root 'scripts\Start-PcSetup.ps1') -Raw
+$bootstrap = Get-Content -LiteralPath (Join-Path $root 'bootstrap.ps1') -Raw
+$features = Get-Content -LiteralPath (Join-Path $root 'scripts\10-windows-features.ps1') -Raw
 
 Assert-True ($installLauncher -match 'Start-PcSetupUpdate\.ps1' -and $installLauncher -match '-LauncherName INSTALAR\.cmd') 'INSTALAR.cmd deve usar o orquestrador completo.'
 Assert-True ($updateLauncher -match 'Start-PcSetupUpdate\.ps1' -and $updateLauncher -match '-LauncherName ATUALIZAR\.cmd') 'ATUALIZAR.cmd deve usar o orquestrador completo.'
@@ -25,5 +27,9 @@ Assert-True ($update -notmatch 'Read-Host\s+.*Quer reconciliar') 'O WSL nao deve
 Assert-True ($assisted -match '\[switch\]\$NoPause' -and $assisted -match "ValidateSet\('INSTALAR\.cmd','ATUALIZAR\.cmd'\)") 'O fluxo protegido deve suportar composicao sem perder retomada apos reinicio.'
 Assert-True ($assisted -match 'Write-PcSetupFailureDiagnostic' -and $assisted -match 'last-error\.json' -and $assisted -match 'ScriptStackTrace') 'O processo elevado deve persistir a mensagem e o contexto da falha.'
 Assert-True ($update -match 'Get-PcSetupWindowsFailureDiagnostic' -and $update -match 'Detalhe:.*failure\.Message' -and $update -match 'Diagnostico:.*failure\.Path') 'O orquestrador deve recuperar e mostrar o erro do processo elevado na janela principal.'
+Assert-True ($assisted -match "'verify-'" -and $assisted -match "Where-Object Status -eq 'FAIL'" -and $assisted -match '\$failedDetails') 'Falhas da verificacao final devem ser convertidas em diagnostico legivel.'
+Assert-True ($update -match "'verify-\*\.json'" -and $update -match '\$report\.Checks' -and $update -match 'A validacao final encontrou') 'O orquestrador deve usar o relatorio Verify como fallback de diagnostico.'
+Assert-True ($bootstrap -match "Stage -in @\('Starting', 'RestartRequired'\)") 'A retomada apos reinicio deve reconvergir os recursos do Windows antes de continuar.'
+Assert-True ($features -match "State -notin @\('Enabled', 'EnablePending'\)" -and $features -match "State -eq 'EnablePending'") 'A aplicacao deve validar o estado efetivo de cada recurso e preservar a necessidade de reinicio.'
 
 Write-Host 'PASS: atualizador idempotente e fluxo de retomada.' -ForegroundColor Green

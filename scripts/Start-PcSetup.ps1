@@ -82,6 +82,7 @@ try {
     $configuration = Import-PcSetupConfiguration -Path $configPath
     $systemRoot = [IO.Path]::GetPathRoot($env:SystemRoot)
     $stateDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'StateDirectory' -SystemRoot $systemRoot
+    $reportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'ReportDirectory' -SystemRoot $systemRoot
     $lastErrorPath = Join-Path $stateDirectory 'last-error.json'
     if (Test-Path -LiteralPath $lastErrorPath -PathType Leaf) { Remove-Item -LiteralPath $lastErrorPath -Force -ErrorAction SilentlyContinue }
     $applyStatePath = Join-Path $stateDirectory 'apply-state.json'
@@ -129,19 +130,29 @@ try {
 
     Write-Host ''
     Write-Host 'Executando a verificacao final...' -ForegroundColor Cyan
-    & $windowsPowerShell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $verifyPath -Config $configPath
+    $verificationReportPath = Join-Path $reportDirectory ('verify-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json')
+    & $windowsPowerShell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $verifyPath -Config $configPath -ReportPath $verificationReportPath
     $verificationExitCode = $LASTEXITCODE
     if ($verificationExitCode -eq 0) {
         Write-Host ''
         Write-Host "$($operation.ToUpperInvariant()) E VALIDACAO CONCLUIDAS." -ForegroundColor Green
+        Wait-PcSetupExit
+        exit 0
     }
-    else {
-        Write-Host ''
-        Write-Host "A $($operation.ToLowerInvariant()) terminou, mas a validacao encontrou falhas. Codigo: $verificationExitCode" -ForegroundColor Yellow
-        Write-Host 'Consulte o relatorio exibido acima.'
+
+    $verificationMessage = "A validacao final encontrou falhas. Codigo: $verificationExitCode."
+    try {
+        $verificationReport = Get-Content -LiteralPath $verificationReportPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $failedChecks = @($verificationReport.Checks | Where-Object Status -eq 'FAIL')
+        if ($failedChecks.Count -gt 0) {
+            $failedDetails = @($failedChecks | ForEach-Object { "$($_.Name): $($_.Detail)" })
+            $verificationMessage = "A validacao final encontrou $($failedChecks.Count) falha(s):`n- $($failedDetails -join "`n- ")"
+        }
     }
-    Wait-PcSetupExit
-    exit $verificationExitCode
+    catch {
+        $verificationMessage += " O relatorio nao pode ser lido: $($_.Exception.Message)"
+    }
+    throw "$verificationMessage`nRelatorio: $verificationReportPath"
 }
 catch {
     $failure = $_

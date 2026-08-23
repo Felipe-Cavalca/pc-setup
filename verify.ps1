@@ -178,15 +178,20 @@ if ($paths) {
             foreach ($grant in $expectation.Grants) {
                 $name = [string]$grant.Name
                 $expectedRights = [Security.AccessControl.FileSystemRights]$grant.Rights
+                $allowedRights = $expectedRights -bor [Security.AccessControl.FileSystemRights]::Synchronize
                 $matchingRules = @($allowRules | Where-Object { $_.IdentityReference.Value -match "\\$([regex]::Escape($name))$" })
                 $validRule = $null -ne ($matchingRules | Where-Object {
+                    $actualRights = [Security.AccessControl.FileSystemRights]$_.FileSystemRights
+                    $hasRequiredRights = ($actualRights -band $expectedRights) -eq $expectedRights
+                    $hasOnlyAllowedRights = ($actualRights -band (-bnot $allowedRights)) -eq 0
                     -not $_.IsInherited -and
-                    $_.FileSystemRights -eq $expectedRights -and
+                    $hasRequiredRights -and
+                    $hasOnlyAllowedRights -and
                     ($_.InheritanceFlags -band [Security.AccessControl.InheritanceFlags]::ContainerInherit) -ne 0 -and
                     ($_.InheritanceFlags -band [Security.AccessControl.InheritanceFlags]::ObjectInherit) -ne 0 -and
                     $_.PropagationFlags -eq [Security.AccessControl.PropagationFlags]::None
                 } | Select-Object -First 1)
-                $detail = if ($validRule) { "$($grant.Rights) explicito e herdavel" } elseif ($matchingRules.Count -gt 0) { "regra presente com direitos ou heranca diferentes de $($grant.Rights)" } else { 'regra esperada ausente' }
+                $detail = if ($validRule) { "$($grant.Rights) explicito e herdavel; Synchronize canonico permitido" } elseif ($matchingRules.Count -gt 0) { "regra presente com direitos extras ou heranca diferentes de $($grant.Rights)" } else { 'regra esperada ausente' }
                 Add-Check -Status $(if ($validRule) { 'PASS' } else { 'FAIL' }) -Name "ACL $($expectation.Key)/$name" -Detail $detail
             }
             $expectedIdentityNames = @($systemName, $administratorsName) + @($expectation.Grants | ForEach-Object { "$env:COMPUTERNAME\$($_.Name)" })
