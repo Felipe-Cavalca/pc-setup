@@ -119,7 +119,7 @@ A autenticação do harness e as credenciais Git não são automatizadas. Elas p
 
 `Packages.Profiles` seleciona arquivos de `config/packages`. Cada linha usa `ID|escopo`, por exemplo `Google.Chrome|machine` ou `Microsoft.WindowsTerminal|user`. Uma linha somente com o ID usa `Packages.InstallScope` como padrão.
 
-`Packages.InstallScope` aceita `machine` ou `user`; o perfil padrão usa `machine`, mas cada pacote pode sobrescrever o valor. Chrome permanece em `machine` para ficar disponível às contas locais. Bitwarden e Windows Terminal usam `user`. A fase Winget roda na conta diária e instaladores de máquina podem solicitar UAC.
+`Packages.InstallScope` aceita `machine` ou `user`; o perfil padrão usa `machine`, mas cada pacote pode sobrescrever o valor. Chrome permanece em `machine` para ficar disponível às contas locais. Bitwarden, PowerShell e Windows Terminal usam `user`. A fase Winget roda na conta diária e instaladores de máquina podem solicitar UAC por conta própria.
 
 O fallback fica em `offline-installers.psd1`. Cada entrada exige `PackageId`, caminho relativo, SHA-256, argumentos silenciosos e `Scope` igual ao escopo configurado. O diretório padrão é `installers` na raiz do projeto.
 

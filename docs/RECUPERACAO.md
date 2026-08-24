@@ -17,6 +17,25 @@ Depois que a fase Windows termina, `%LOCALAPPDATA%\pc-setup\user-reconcile-state
 
 Não edite o arquivo de estado manualmente. Se o projeto ou a configuração mudou, preserve o relatório de falha e gere um novo plano. Remover um estado incompleto é uma decisão manual: faça isso apenas depois de verificar quais etapas foram aplicadas, pois o projeto converge de forma aditiva e não desfaz automaticamente alterações concluídas.
 
+## Winget sem acesso à fonte padrão
+
+Se a instalação de um pacote mostrar `Failed to open the predefined source`, `0x80070005` ou `Acesso negado`, permaneça conectado na conta diária configurada e abra o PowerShell normalmente, sem usar **Executar como administrador**. Execute:
+
+```powershell
+winget source list
+winget source update --name winget
+```
+
+Se a atualização terminar corretamente, execute novamente `INSTALAR.cmd` ou `ATUALIZAR.cmd`. A fase da conta diária será retomada do estado salvo; não é necessário recriar a VM nem repetir a instalação do Windows.
+
+As fontes e o App Installer pertencem ao perfil que executa o Winget. Não use primeiro `winget source reset --force` em um PowerShell aberto com as credenciais de outra conta administrativa, pois isso pode reparar o perfil errado. Se `winget source update` continuar retornando acesso negado, atualize ou repare o **App Installer** pela Microsoft Store na conta diária antes de tentar novamente.
+
+`--accept-source-agreements` deve ser usado em comandos como `list`, `install` e `upgrade`; ele não é uma opção de `winget source update`. O `pc-setup` consulta explicitamente apenas a fonte `winget`, portanto não depende da aceitação dos termos da fonte `msstore`.
+
+Antes de processar os pacotes, o `pc-setup` atualiza automaticamente a fonte `winget` da conta diária. Os comandos acima permanecem úteis para diagnóstico manual caso o App Installer não consiga concluir essa atualização.
+
+O Winget não é reiniciado com outra conta administrativa, pois as fontes e o App Installer pertencem ao perfil diário. O perfil padrão usa o instalador `user` do PowerShell. Instaladores `machine` que conseguem elevar a si mesmos ainda podem abrir UAC; se o próprio comando Winget exigir contexto administrativo, a tentativa online termina com diagnóstico e o fallback offline configurado é avaliado.
+
 ## ACLs
 
 Os backups ficam em `%ProgramData%\pc-setup\acl-backups`. Cada execução contém `manifest.json` e arquivos aceitos por `icacls /restore`. Prefira restaurar somente a execução e a pasta afetadas, em um Windows PowerShell elevado, depois de conferir os caminhos no manifesto.
