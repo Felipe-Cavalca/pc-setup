@@ -25,6 +25,7 @@ Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-
 - resolve as releases estáveis atuais do `ai-jail` e do `ai-memory`, exige os digests SHA-256 publicados pelo GitHub, instala/atualiza o Codex e fornece um launcher isolado com memória local;
 - permite que o usuário diário administre o Hyper-V sem torná-lo administrador geral do Windows;
 - gera relatórios JSON de plano, aplicação, versões instaladas pelo Winget e validação;
+- atualiza na Área de Trabalho uma cópia legível do plano em HTML e Markdown antes de pedir confirmação;
 - registra um snapshot local das versões conhecidas como boas para uma reinstalação reproduzível;
 - prepara backup local verificável, cuja cópia para outro disco é disparada manualmente;
 - permite restaurar integralmente um snapshot em uma pasta temporária, validar os hashes e remover somente essa cópia de teste;
@@ -51,7 +52,7 @@ O arquivo:
 
 1. carrega `config\machine.psd1` e planeja Windows e WSL;
 2. solicita permissão de Administrador;
-3. mostra o plano e o disco escolhido;
+3. mostra o plano e o disco escolhido e atualiza `PLANO-PC-SETUP.html` e `PLANO-PC-SETUP.md` na Área de Trabalho;
 4. pede `S` uma única vez;
 5. aplica e valida as configurações de máquina em processo elevado;
 6. se a conta atual não for a conta diária configurada, pede para entrar nela e executar o mesmo arquivo novamente;
@@ -92,7 +93,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\bootstrap.ps1 -Config .\config\machine.psd1 -Plan
 ```
 
-Leia o plano mostrado e o caminho do relatório. Se a escolha do disco, usuários, recursos e programas estiver correta:
+Leia o plano mostrado e o caminho do relatório. O JSON técnico continua em `%ProgramData%\pc-setup\reports`; o perfil padrão também atualiza `PLANO-PC-SETUP.html` e `.md` na Área de Trabalho com a mesma prévia. Se a escolha do disco, usuários, recursos e programas estiver correta:
 
 ```powershell
 .\bootstrap.ps1 -Config .\config\machine.psd1 -Apply
@@ -245,6 +246,8 @@ O Windows limita `Checkpoint-Computer` a um ponto por período de 24 horas. Por 
 Executar um script de alteração diretamente com `-Apply` exige um novo ponto. `-Plan`, `verify.ps1`, testes e o lançador da VM não alteram a configuração do Windows e não criam ponto.
 
 Relatórios e estado das operações de máquina ficam em `%ProgramData%\pc-setup`. Inventário Winget, personalização e ambientes WSL ficam em `%LOCALAPPDATA%\pc-setup` da conta diária. Um ponto de restauração protege configurações e arquivos de sistema, mas não substitui backup dos arquivos pessoais.
+
+Cada plano válido mantém o JSON técnico datado e sobrescreve os arquivos legíveis `PLANO-PC-SETUP.html` e `.md` na Área de Trabalho, evitando acúmulo. Ambos indicam que são apenas uma prévia; nenhuma alteração é aplicada até a confirmação. Quando o lançador solicita credenciais de administrador, os arquivos continuam sendo destinados à Área de Trabalho da conta que iniciou o processo.
 
 Depois da reconciliação, o perfil padrão cria `RESUMO-DA-MAQUINA.html` e `.md` na Área de Trabalho. `RESUMO-DA-MAQUINA.cmd` atualiza os dois arquivos sob demanda. O relatório é somente leitura e não atualiza BIOS, firmware, drivers, BitLocker, TPM ou YubiKey. Consulte [`docs/AUDITORIA-DA-MAQUINA.md`](docs/AUDITORIA-DA-MAQUINA.md).
 

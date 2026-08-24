@@ -4,7 +4,8 @@ param(
     [string]$Config = '',
     [switch]$NoPause,
     [ValidateSet('INSTALAR.cmd','ATUALIZAR.cmd')]
-    [string]$LauncherName = 'INSTALAR.cmd'
+    [string]$LauncherName = 'INSTALAR.cmd',
+    [string]$CallerDesktop = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -60,7 +61,10 @@ function Write-PcSetupFailureDiagnostic {
 
 if (-not (Test-Administrator)) {
     try {
+        if ([string]::IsNullOrWhiteSpace($CallerDesktop)) { $CallerDesktop = [Environment]::GetFolderPath('Desktop') }
+        if (-not [string]::IsNullOrWhiteSpace($CallerDesktop)) { $CallerDesktop = [IO.Path]::GetFullPath($CallerDesktop) }
         $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Config `"$configPath`" -LauncherName $LauncherName"
+        if (-not [string]::IsNullOrWhiteSpace($CallerDesktop)) { $arguments += " -CallerDesktop `"$CallerDesktop`"" }
         if ($NoPause) { $arguments += ' -NoPause' }
         $process = Start-Process -FilePath $windowsPowerShell -ArgumentList $arguments -Verb RunAs -Wait -PassThru
         exit $process.ExitCode
@@ -70,6 +74,10 @@ if (-not (Test-Administrator)) {
         Wait-PcSetupExit
         exit 1
     }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($CallerDesktop)) {
+    $env:PC_SETUP_CALLER_DESKTOP = [IO.Path]::GetFullPath($CallerDesktop)
 }
 
 $lastErrorPath = Join-Path $env:ProgramData 'pc-setup\last-error.json'

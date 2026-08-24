@@ -74,6 +74,12 @@ function Import-PcSetupConfiguration {
             FileBaseName = 'RESUMO-DA-MAQUINA'; Formats = @('Html', 'Markdown')
         }
     }
+    if (-not $configuration.ContainsKey('PlanSummary')) {
+        $configuration['PlanSummary'] = @{
+            Enabled = $true; OutputDirectory = '{Desktop}'
+            FileBaseName = 'PLANO-PC-SETUP'; Formats = @('Html', 'Markdown')
+        }
+    }
     if (-not $configuration.ContainsKey('Versions')) {
         $configuration['Versions'] = @{ Mode = 'Latest'; LockFile = 'config\versions.lock.json'; CaptureKnownGood = $true }
     }
@@ -81,7 +87,7 @@ function Import-PcSetupConfiguration {
         $configuration.Agent['RestrictedMode'] = @{ Enabled = $false; Lockdown = $true }
     }
 
-    foreach ($key in @('SchemaVersion','ProfileName','Execution','Reconciliation','Windows','Machine','Storage','Backup','MachineAudit','Accounts','Agent','Features','Packages','WSL','Personalization','Versions','Debloat','Recovery','Security','Runtime')) {
+    foreach ($key in @('SchemaVersion','ProfileName','Execution','Reconciliation','Windows','Machine','Storage','Backup','MachineAudit','PlanSummary','Accounts','Agent','Features','Packages','WSL','Personalization','Versions','Debloat','Recovery','Security','Runtime')) {
         Assert-PcSetupTableKey -Table $configuration -Key $key -Path 'config'
     }
     if ($configuration.Agent -is [hashtable] -and -not $configuration.Agent.ContainsKey('Memory')) {
@@ -123,6 +129,7 @@ function Import-PcSetupConfiguration {
         Agent          = @('Enabled','Environment','DefaultCommand','Isolation','Harness','Memory','Launcher','Workspace','Capabilities','EnvironmentAllowList','VirtualMachine','RestrictedMode')
         Backup         = @('Enabled','StagingPathKey','SourcePathKeys','ExternalDestination','VerifyHashes','NoAutomaticDeletion','RestoreTest')
         MachineAudit   = @('Enabled','GenerateAfterReconciliation','OutputDirectory','FileBaseName','Formats')
+        PlanSummary    = @('Enabled','OutputDirectory','FileBaseName','Formats')
         Versions       = @('Mode','LockFile','CaptureKnownGood')
     }
     foreach ($section in $requiredKeys.Keys) {
@@ -229,6 +236,12 @@ function Import-PcSetupConfiguration {
     $auditFormats = @($configuration.MachineAudit.Formats | ForEach-Object { [string]$_ })
     if ($auditFormats.Count -eq 0 -or @($auditFormats | Where-Object { $_ -notin @('Html','Markdown') }).Count -gt 0) { throw 'MachineAudit.Formats aceita apenas Html e Markdown.' }
     $configuration.MachineAudit.Formats = @($auditFormats | Select-Object -Unique)
+    if (-not ($configuration.PlanSummary.Enabled -is [bool])) { throw 'PlanSummary.Enabled deve ser booleano.' }
+    if ([string]::IsNullOrWhiteSpace([string]$configuration.PlanSummary.OutputDirectory) -or [string]$configuration.PlanSummary.OutputDirectory -match "[`r`n]") { throw 'PlanSummary.OutputDirectory invalido.' }
+    if ([string]$configuration.PlanSummary.FileBaseName -notmatch '^[A-Za-z0-9._-]+$') { throw 'PlanSummary.FileBaseName deve usar apenas letras, numeros, ponto, hifen ou sublinhado.' }
+    $planFormats = @($configuration.PlanSummary.Formats | ForEach-Object { [string]$_ })
+    if ($planFormats.Count -eq 0 -or @($planFormats | Where-Object { $_ -notin @('Html','Markdown') }).Count -gt 0) { throw 'PlanSummary.Formats aceita apenas Html e Markdown.' }
+    $configuration.PlanSummary.Formats = @($planFormats | Select-Object -Unique)
     if ([string]$configuration.Versions.Mode -notin @('Latest','Locked')) { throw 'Versions.Mode deve ser Latest ou Locked.' }
     if ([string]::IsNullOrWhiteSpace([string]$configuration.Versions.LockFile)) { throw 'Versions.LockFile nao pode ficar vazio.' }
     $null = Resolve-PcSetupProjectPath -Configuration $configuration -Value ([string]$configuration.Versions.LockFile) -SettingName 'Versions.LockFile'
@@ -431,7 +444,8 @@ function Resolve-PcSetupTemplate {
     if ([string]::IsNullOrWhiteSpace($programData)) { $programData = Join-Path $SystemRoot 'ProgramData' }
     $localAppData = $env:LOCALAPPDATA
     if ([string]::IsNullOrWhiteSpace($localAppData)) { $localAppData = Join-Path $SystemRoot 'Users\Default\AppData\Local' }
-    $desktop = [Environment]::GetFolderPath('Desktop')
+    $desktop = $env:PC_SETUP_CALLER_DESKTOP
+    if ([string]::IsNullOrWhiteSpace($desktop)) { $desktop = [Environment]::GetFolderPath('Desktop') }
     if ([string]::IsNullOrWhiteSpace($desktop)) {
         $userProfile = $env:USERPROFILE
         if ([string]::IsNullOrWhiteSpace($userProfile)) { $userProfile = Join-Path $SystemRoot 'Users\Default' }

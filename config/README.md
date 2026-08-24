@@ -49,6 +49,8 @@ Use [`examples/machine-one-disk.psd1`](examples/machine-one-disk.psd1) como pont
 
 `MachineAudit` controla o resumo local. O padrão gera HTML e Markdown na Área de Trabalho ao final de `INSTALAR.cmd` ou `ATUALIZAR.cmd`; o nome e o diretório podem ser alterados. A auditoria é informativa e tolera recursos indisponíveis, registrando-os como tal sem tentar corrigir firmware, drivers ou criptografia.
 
+`PlanSummary` controla a cópia legível do último plano. O padrão mantém o JSON técnico datado em `%ProgramData%\pc-setup\reports` e sobrescreve `PLANO-PC-SETUP.html` e `.md` na Área de Trabalho antes da confirmação. `Enabled`, `OutputDirectory`, `FileBaseName` e `Formats` podem ser alterados sem guardar dados secretos. Os formatos aceitos são `Html` e `Markdown`.
+
 ## Contas
 
 Cada entrada possui `Enabled`, `Name` e `Role`. Funções válidas: `Standard` e `Administrator`.

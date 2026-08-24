@@ -34,8 +34,8 @@ foreach ($file in $markdownFiles) {
 Assert-True ($brokenLinks.Count -eq 0) "Links relativos quebrados: $($brokenLinks -join '; ')"
 
 $requiredDocumentation = @{
-    'README.md'                           = @('ai-memory', '/mnt/d/Dev', '0x80072ee7')
-    'config\README.md'                    = @('Agent.Memory', 'ProjectStrategy', 'AI_MEMORY_AUTH_TOKEN')
+    'README.md'                           = @('ai-memory', '/mnt/d/Dev', '0x80072ee7', 'PLANO-PC-SETUP.html')
+    'config\README.md'                    = @('Agent.Memory', 'ProjectStrategy', 'AI_MEMORY_AUTH_TOKEN', 'PlanSummary')
     'docs\AGENTE-IA.md'                   = @('finalize-session', 'bootstrap --dry-run', '127.0.0.1')
     'docs\RECUPERACAO.md'                 = @('0x80072ee7', 'InternetOpenUrl() failed')
     'SECURITY.md'                         = @('Memória e dados sensíveis', 'ai-memory')

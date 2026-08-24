@@ -84,6 +84,13 @@
         Formats                     = @('Html', 'Markdown')
     }
 
+    PlanSummary = @{
+        Enabled         = $true
+        OutputDirectory = '{Desktop}'
+        FileBaseName    = 'PLANO-PC-SETUP'
+        Formats         = @('Html', 'Markdown')
+    }
+
     Accounts = @{
         DailyUser = @{
             Enabled = $true

@@ -10,8 +10,10 @@ $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $PSScriptRoot 'config\machine.psd1' }
 $coreModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Core.psm1'
 $recoveryModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Recovery.psm1'
+$planSummaryModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.PlanSummary.psm1'
 Import-Module $coreModule -Force
 Import-Module $recoveryModule -Force
+Import-Module $planSummaryModule -Force
 
 $mode = Get-PcSetupExecutionMode -Plan:$Plan -Apply:$Apply
 Assert-PcSetupAdministrator
@@ -119,6 +121,14 @@ if ($mode -eq 'Plan') {
     $baseReport.Status = 'Planned'
     $baseReport.CompletedAt = (Get-Date).ToString('o')
     $reportPath = Write-RunReport -Report $baseReport
+    $readableReports = @()
+    if ($configuration.PlanSummary.Enabled) {
+        $planOutputDirectory = Resolve-PcSetupTemplate -Value ([string]$configuration.PlanSummary.OutputDirectory) -Configuration $configuration -SystemRoot $systemRoot
+        $planOutputDirectory = [IO.Path]::GetFullPath($planOutputDirectory)
+        $planSummary = Write-PcSetupPlanSummaryFiles -Plan $baseReport -JsonPath $reportPath -OutputDirectory $planOutputDirectory -FileBaseName ([string]$configuration.PlanSummary.FileBaseName) -Formats @($configuration.PlanSummary.Formats)
+        $readableReports = @($planSummary.Files)
+        Write-Host "[PLANO LEGIVEL] $($readableReports -join ', ')" -ForegroundColor Green
+    }
 
     $receipt = @{
         CreatedAt    = (Get-Date).ToString('o')
@@ -127,6 +137,7 @@ if ($mode -eq 'Plan') {
         ProjectSha256 = $projectHash
         DataRoot     = $storage.DataRoot
         ReportPath   = $reportPath
+        ReadableReports = $readableReports
     }
     Write-PcSetupJson -InputObject $receipt -Path $planReceiptPath | Out-Null
     Write-Host "`nPlano concluido sem alterar configuracoes do Windows." -ForegroundColor Green
