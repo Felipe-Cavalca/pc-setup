@@ -15,6 +15,26 @@ $wslBootstrapPath = Join-Path $root 'wsl\bootstrap.ps1'
 $wslVerifyPath = Join-Path $root 'wsl\verify.ps1'
 $machineSummaryPath = Join-Path $root 'scripts\New-PcSetupMachineSummary.ps1'
 $operation = if ($LauncherName -eq 'INSTALAR.cmd') { 'Instalacao' } else { 'Atualizacao' }
+$executionLog = $null
+$currentStage = 'Inicializacao'
+
+function Write-PcSetupSessionEvent {
+    param(
+        [Parameter(Mandatory)][ValidateSet('Started','Info','Pending','Succeeded','Failed')][string]$Status,
+        [Parameter(Mandatory)][string]$Message,
+        [string]$Command = '',
+        [object[]]$Arguments = @(),
+        [System.Collections.IDictionary]$Data
+    )
+
+    if ($null -eq $script:executionLog) { return }
+    try {
+        Write-PcSetupExecutionEvent -Log $script:executionLog -Stage $script:currentStage -Status $Status -Message $Message -Command $Command -Arguments $Arguments -Data $Data | Out-Null
+    }
+    catch {
+        Write-Warning "Nao foi possivel atualizar o log da sessao: $($_.Exception.Message)"
+    }
+}
 
 function Get-CompletedWindowsApplyReport {
     param([Parameter(Mandatory)][hashtable]$Configuration)
@@ -97,7 +117,14 @@ try {
     Set-Location -LiteralPath $root
 
     Import-Module (Join-Path $PSScriptRoot 'lib\PcSetup.Core.psm1') -Force
+    Import-Module (Join-Path $PSScriptRoot 'lib\PcSetup.ExecutionLog.psm1') -Force
     $configuration = Import-PcSetupConfiguration -Path $Config
+    if ($configuration.Runtime.ExecutionLogEnabled) {
+        $executionLogDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'UserReportDirectory'
+        $executionLog = New-PcSetupExecutionLog -Directory $executionLogDirectory -Operation $operation
+        Write-PcSetupSessionEvent -Status Started -Message "$operation iniciada." -Data @{ Launcher = $LauncherName; WindowsAccount = $env:USERNAME; Profile = $configuration.ProfileName }
+        Write-Host "[LOG] $($executionLog.Path)" -ForegroundColor DarkGray
+    }
     $configHash = (Get-FileHash -LiteralPath $configuration._ConfigPath -Algorithm SHA256).Hash
     $projectHash = Get-PcSetupProjectFingerprint -Configuration $configuration
     $dailyUser = [string]$configuration.Accounts.DailyUser.Name
@@ -115,7 +142,10 @@ try {
         if ($environments.Count -gt 0) {
             Write-Host 'Planos dos ambientes WSL:' -ForegroundColor Cyan
             foreach ($environment in $environments) {
+                $currentStage = "PlanoWSL/$($environment.Name)"
+                Write-PcSetupSessionEvent -Status Started -Message "Planejando o ambiente WSL $($environment.Name)." -Command 'wsl\bootstrap.ps1' -Arguments @('-Config', $Config, '-Environment', $environment.Name, '-Plan')
                 & $wslBootstrapPath -Config $Config -Environment $environment.Name -Plan | Out-Null
+                Write-PcSetupSessionEvent -Status Succeeded -Message "Plano WSL $($environment.Name) validado."
             }
             Write-Host ''
         }
@@ -148,17 +178,23 @@ try {
     $resumeUserPhaseOnly = $isDailyUser -and $completedApply -and ($pendingMatches -or -not $userPhaseAlreadyCompleted)
 
     if ($resumeUserPhaseOnly) {
+        $currentStage = 'Retomada'
+        Write-PcSetupSessionEvent -Status Info -Message 'Windows ja concluido; retomando as fases da conta diaria.'
         Write-Host '[RETOMADA] O Windows ja foi aplicado e validado. Retomando pacotes, personalizacao e WSL da conta diaria.' -ForegroundColor Yellow
     }
     else {
+        $currentStage = 'Windows'
+        Write-PcSetupSessionEvent -Status Started -Message 'Iniciando planejamento, aplicacao e verificacao do Windows.' -Command 'powershell.exe' -Arguments @('-File', $startPath, '-Config', $configuration._ConfigPath, '-NoPause', '-LauncherName', $LauncherName)
         $windowsStartedAt = Get-Date
         & $windowsPowerShell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $startPath -Config $configuration._ConfigPath -NoPause -LauncherName $LauncherName
         $windowsExitCode = $LASTEXITCODE
         if ($windowsExitCode -eq 2) {
+            Write-PcSetupSessionEvent -Status Pending -Message "$operation cancelada antes da aplicacao." -Data @{ ExitCode = $windowsExitCode }
             Write-Host "$operation cancelada antes da aplicacao." -ForegroundColor Yellow
             exit 0
         }
         if ($windowsExitCode -eq 3) {
+            Write-PcSetupSessionEvent -Status Pending -Message 'Reinicio do Windows necessario para continuar.' -Data @{ ExitCode = $windowsExitCode }
             Write-Host "Reinicie o Windows e execute $LauncherName novamente para continuar." -ForegroundColor Yellow
             exit 0
         }
@@ -169,10 +205,13 @@ try {
             }
             throw "A reconciliacao do Windows falhou com codigo $windowsExitCode e nao produziu um diagnostico legivel."
         }
+        Write-PcSetupSessionEvent -Status Succeeded -Message 'Windows aplicado e validado.' -Data @{ ExitCode = $windowsExitCode }
 
         $completedApply = Get-CompletedWindowsApplyReport -Configuration $configuration
         if (-not $completedApply) { throw 'O Windows terminou sem um relatorio Apply concluido e validado para esta versao do projeto.' }
         if (-not $isDailyUser) {
+            $currentStage = 'TrocaDeConta'
+            Write-PcSetupSessionEvent -Status Pending -Message "Fase da maquina concluida; continuar na conta Windows $dailyUser."
             Write-Host ''
             Write-Host "[TROCA DE CONTA] A fase da maquina foi concluida. Entre na conta Windows $dailyUser e execute $LauncherName novamente." -ForegroundColor Yellow
             Write-Host "A conta esta habilitada e pertence ao grupo local Usuarios. Se o bloco ainda nao aparecer, encerre a sessao e use Outro usuario com .\$dailyUser."
@@ -191,7 +230,10 @@ try {
 
     Write-Host ''
     Write-Host '[USUARIO] Aplicando e validando configuracoes da conta diaria...' -ForegroundColor Cyan
+    $currentStage = 'PerfilUsuario'
+    Write-PcSetupSessionEvent -Status Started -Message 'Aplicando pacotes e personalizacao da conta diaria.' -Command 'scripts\90-user-profile.ps1' -Arguments @('-Config', $configuration._ConfigPath, '-WindowsApplyReport', $completedApply.Path)
     & (Join-Path $root 'scripts\90-user-profile.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $completedApply.Path | Out-Host
+    Write-PcSetupSessionEvent -Status Succeeded -Message 'Pacotes e personalizacao da conta diaria validados.'
 
     if ($environments.Count -eq 0) {
         $knownGoodVersions = $null
@@ -209,6 +251,8 @@ try {
         Write-PcSetupJson -InputObject $completedState -Path $completedStatePath | Out-Null
         if (Test-Path -LiteralPath $reconcileStatePath -PathType Leaf) { Remove-Item -LiteralPath $reconcileStatePath -Force }
         Invoke-PcSetupDesktopMachineSummary -Configuration $configuration
+        $currentStage = 'Conclusao'
+        Write-PcSetupSessionEvent -Status Succeeded -Message "$operation e validacao concluidas sem ambientes WSL aplicaveis."
         Write-Host '[OK] Nenhum ambiente WSL habilitado para esta conta.' -ForegroundColor Green
         Write-Host "$($operation.ToUpperInvariant()) E VALIDACAO CONCLUIDAS." -ForegroundColor Green
         exit 0
@@ -217,10 +261,14 @@ try {
     foreach ($environment in $environments) {
         Write-Host ''
         Write-Host "[WSL] Reconciliando $($environment.Name)..." -ForegroundColor Cyan
+        $currentStage = "WSL/$($environment.Name)"
+        Write-PcSetupSessionEvent -Status Started -Message "Aplicando o ambiente WSL $($environment.Name)." -Command 'wsl\bootstrap.ps1' -Arguments @('-Config', $Config, '-Environment', $environment.Name, '-Apply')
         & $wslBootstrapPath -Config $Config -Environment $environment.Name -Apply | Out-Host
+        Write-PcSetupSessionEvent -Status Info -Message "Aplicacao WSL $($environment.Name) concluida; iniciando verificacao." -Command 'wsl\verify.ps1' -Arguments @('-Config', $Config, '-Environment', $environment.Name)
         & $windowsPowerShell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $wslVerifyPath -Config $Config -Environment $environment.Name | Out-Host
         $wslVerifyExitCode = $LASTEXITCODE
         if ($wslVerifyExitCode -ne 0) { throw "A verificacao WSL falhou para $($environment.Name) com codigo $wslVerifyExitCode." }
+        Write-PcSetupSessionEvent -Status Succeeded -Message "Ambiente WSL $($environment.Name) aplicado e validado." -Data @{ ExitCode = $wslVerifyExitCode }
     }
 
     $knownGoodVersions = $null
@@ -241,12 +289,17 @@ try {
     Invoke-PcSetupDesktopMachineSummary -Configuration $configuration
 
     Write-Host ''
+    $currentStage = 'Conclusao'
+    Write-PcSetupSessionEvent -Status Succeeded -Message "$operation e validacao concluidas."
     Write-Host "$($operation.ToUpperInvariant()) E VALIDACAO CONCLUIDAS." -ForegroundColor Green
     exit 0
 }
 catch {
+    $failure = $_
+    Write-PcSetupSessionEvent -Status Failed -Message $failure.Exception.Message -Data @{ ErrorId = $failure.FullyQualifiedErrorId; Category = [string]$failure.CategoryInfo }
     Write-Host ''
     Write-Host "[ERRO] A $($operation.ToLowerInvariant()) foi interrompida com seguranca." -ForegroundColor Red
-    Write-Host $_.Exception.Message -ForegroundColor Red
+    Write-Host $failure.Exception.Message -ForegroundColor Red
+    if ($null -ne $executionLog) { Write-Host "Log da sessao: $($executionLog.Path)" -ForegroundColor Yellow }
     exit 1
 }

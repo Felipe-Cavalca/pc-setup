@@ -82,6 +82,36 @@ $automaticTarget = Resolve-PcSetupWslTarget -Configuration $configuration -Curre
 Assert-Equal 'DailyUser' $automaticTarget.Environment.Name 'A selecao automatica deve escolher o ambiente WSL padrao.'
 Assert-Equal 'felipe' (Get-PcSetupExpectedWslDefaultUser -Configuration $configuration -Environment $agent) 'Aplicar Agent nao deve trocar o usuario WSL padrao.'
 
+$script:capturedBootstrapArguments = @()
+function global:Invoke-PcSetupFakeWslBootstrap {
+    $script:capturedBootstrapArguments = @($args)
+    $global:LASTEXITCODE = 0
+}
+try {
+    $bootstrapResult = Invoke-PcSetupWslLinuxScript -Distribution 'Ubuntu-24.04' -ScriptPath '/mnt/c/pc-setup/wsl/linux/bootstrap.sh' -Environment $agent -Profile $agentProfile -WslCommand 'Invoke-PcSetupFakeWslBootstrap'
+    Assert-Equal 0 $bootstrapResult.ExitCode 'A montagem dos argumentos do bootstrap Agent deve concluir sem erro.'
+    Assert-True ($script:capturedBootstrapArguments -notcontains '--ai-jail-sha256') 'Hash vazio do ai-jail nao pode ser enviado a um executavel nativo.'
+    Assert-True ($script:capturedBootstrapArguments -notcontains '--ai-memory-sha256') 'Hash vazio do ai-memory nao pode ser enviado a um executavel nativo.'
+    $jailDigestIndex = [Array]::IndexOf($script:capturedBootstrapArguments, '--ai-jail-require-asset-digest')
+    $memoryDigestIndex = [Array]::IndexOf($script:capturedBootstrapArguments, '--ai-memory-require-asset-digest')
+    Assert-True ($jailDigestIndex -ge 0 -and $script:capturedBootstrapArguments[$jailDigestIndex + 1] -eq 'true') 'A exigencia de digest do ai-jail deve permanecer pareada.'
+    Assert-True ($memoryDigestIndex -ge 0 -and $script:capturedBootstrapArguments[$memoryDigestIndex + 1] -eq 'true') 'A exigencia de digest do ai-memory deve permanecer pareada.'
+
+    $pinnedProfile = $agentProfile.Clone()
+    $pinnedProfile.AiJail = $agentProfile.AiJail.Clone()
+    $pinnedProfile.AiMemory = $agentProfile.AiMemory.Clone()
+    $pinnedProfile.AiJail.Sha256 = 'A' * 64
+    $pinnedProfile.AiMemory.Sha256 = 'B' * 64
+    $null = Invoke-PcSetupWslLinuxScript -Distribution 'Ubuntu-24.04' -ScriptPath '/mnt/c/pc-setup/wsl/linux/bootstrap.sh' -Environment $agent -Profile $pinnedProfile -WslCommand 'Invoke-PcSetupFakeWslBootstrap'
+    $jailShaIndex = [Array]::IndexOf($script:capturedBootstrapArguments, '--ai-jail-sha256')
+    $memoryShaIndex = [Array]::IndexOf($script:capturedBootstrapArguments, '--ai-memory-sha256')
+    Assert-True ($jailShaIndex -ge 0 -and $script:capturedBootstrapArguments[$jailShaIndex + 1] -eq ('A' * 64)) 'Um hash fixado do ai-jail deve continuar sendo enviado.'
+    Assert-True ($memoryShaIndex -ge 0 -and $script:capturedBootstrapArguments[$memoryShaIndex + 1] -eq ('B' * 64)) 'Um hash fixado do ai-memory deve continuar sendo enviado.'
+}
+finally {
+    Remove-Item -Path Function:\Invoke-PcSetupFakeWslBootstrap -ErrorAction SilentlyContinue
+}
+
 $script:capturedWslArguments = @()
 function global:Invoke-PcSetupFakeWsl {
     $script:capturedWslArguments = @($args)

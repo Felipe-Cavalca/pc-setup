@@ -23,6 +23,7 @@ function New-TestVolume([string]$Drive, [int]$Disk, [bool]$Removable = $false, [
 $configuration = Import-PcSetupConfiguration -Path (Join-Path $root 'config\machine.psd1')
 Assert-Equal 'Interactive' $configuration.Execution.Mode 'O perfil Felipe deve permitir a pergunta de armazenamento.'
 Assert-Equal 'Ask' $configuration.Storage.Data.SecondaryDiskPolicy 'O perfil Felipe deve perguntar antes de usar o segundo disco.'
+Assert-Equal $true $configuration.Runtime.ExecutionLogEnabled 'O perfil Felipe deve manter o log de execucao sanitizado habilitado.'
 $configuration.Execution.Mode = 'Unattended'
 $configuration.Storage.Data.SecondaryDiskPolicy = 'UseIfAvailable'
 $systemVolume = New-TestVolume -Drive C -Disk 0

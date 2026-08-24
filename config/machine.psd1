@@ -320,6 +320,7 @@
         UserReportDirectory = '{LocalAppData}\pc-setup\reports'
         WingetInventoryPath = '{LocalAppData}\pc-setup\winget-installed.json'
         KnownGoodVersionPath = '{LocalAppData}\pc-setup\versions-known-good.json'
+        ExecutionLogEnabled = $true
         StopOnError     = $true
         RequirePlanBeforeApply = $true
     }

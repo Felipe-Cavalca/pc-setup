@@ -34,13 +34,13 @@ foreach ($file in $markdownFiles) {
 Assert-True ($brokenLinks.Count -eq 0) "Links relativos quebrados: $($brokenLinks -join '; ')"
 
 $requiredDocumentation = @{
-    'README.md'                           = @('ai-memory', '/mnt/d/Dev', '0x80072ee7', 'PLANO-PC-SETUP.html')
-    'config\README.md'                    = @('Agent.Memory', 'ProjectStrategy', 'AI_MEMORY_AUTH_TOKEN', 'PlanSummary')
+    'README.md'                           = @('ai-memory', '/mnt/d/Dev', '0x80072ee7', 'PLANO-PC-SETUP.html', 'TESTAR-INTEGRACAO.cmd', 'execution-*.jsonl')
+    'config\README.md'                    = @('Agent.Memory', 'ProjectStrategy', 'AI_MEMORY_AUTH_TOKEN', 'PlanSummary', 'ExecutionLogEnabled')
     'docs\AGENTE-IA.md'                   = @('finalize-session', 'bootstrap --dry-run', '127.0.0.1')
-    'docs\RECUPERACAO.md'                 = @('0x80072ee7', 'InternetOpenUrl() failed')
+    'docs\RECUPERACAO.md'                 = @('0x80072ee7', 'InternetOpenUrl() failed', '[REDACTED]')
     'SECURITY.md'                         = @('Memória e dados sensíveis', 'ai-memory')
     'wsl\README.md'                       = @('ai-memory', '/mnt/d/Dev', 'filesystem Linux')
-    'imagem-windows\docs\TESTE-EM-VM.md' = @('ai-memory', 'MCP')
+    'imagem-windows\docs\TESTE-EM-VM.md' = @('ai-memory', 'MCP', 'TESTAR-INTEGRACAO.cmd')
 }
 foreach ($relativePath in $requiredDocumentation.Keys) {
     $content = Get-Content -LiteralPath (Join-Path $root $relativePath) -Raw

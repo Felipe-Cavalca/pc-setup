@@ -49,6 +49,9 @@ function Import-PcSetupConfiguration {
     if ($configuration.Runtime -is [hashtable] -and -not $configuration.Runtime.ContainsKey('KnownGoodVersionPath')) {
         $configuration.Runtime['KnownGoodVersionPath'] = '{LocalAppData}\pc-setup\versions-known-good.json'
     }
+    if ($configuration.Runtime -is [hashtable] -and -not $configuration.Runtime.ContainsKey('ExecutionLogEnabled')) {
+        $configuration.Runtime['ExecutionLogEnabled'] = $true
+    }
     if ($configuration.Storage -is [hashtable] -and -not $configuration.Storage.ContainsKey('Integrations')) {
         $configuration.Storage['Integrations'] = @{
             HyperV = @{ Enabled = $false; PathKey = 'VirtualMachines'; Mode = 'Automatic' }
@@ -125,7 +128,7 @@ function Import-PcSetupConfiguration {
         Debloat        = @('Enabled','Mode','Repository','Release','ArchiveSha256','Preset','Silent','AppRemovalTarget','RemoveGamingApps','RequireSha256','RequireConfirmation')
         Recovery       = @('RequireRestorePointBeforeChanges','Scope','SystemProtectionMustBeEnabled','EnableSystemProtectionAutomatically','FailIfRestorePointUnavailable','AllowExistingRestorePointReuse','AllowSameApplySessionReuse','ProtectDirectScriptExecution','UserPhaseReceiptMaxAgeHours')
         Security       = @('DailyUserMustBeStandard','BackupAclBeforeChanges','ManageBitLocker','BitLockerMode','ReportBitLockerStatus','RequireRecoveryKeyCheck','DemoteDailyUserAutomatically','HyperVAdministratorAccounts')
-        Runtime        = @('StateDirectory','ReportDirectory','UserStateDirectory','UserReportDirectory','WingetInventoryPath','KnownGoodVersionPath','StopOnError','RequirePlanBeforeApply')
+        Runtime        = @('StateDirectory','ReportDirectory','UserStateDirectory','UserReportDirectory','WingetInventoryPath','KnownGoodVersionPath','ExecutionLogEnabled','StopOnError','RequirePlanBeforeApply')
         Agent          = @('Enabled','Environment','DefaultCommand','Isolation','Harness','Memory','Launcher','Workspace','Capabilities','EnvironmentAllowList','VirtualMachine','RestrictedMode')
         Backup         = @('Enabled','StagingPathKey','SourcePathKeys','ExternalDestination','VerifyHashes','NoAutomaticDeletion','RestoreTest')
         MachineAudit   = @('Enabled','GenerateAfterReconciliation','OutputDirectory','FileBaseName','Formats')
@@ -197,6 +200,7 @@ function Import-PcSetupConfiguration {
     if ([int]$configuration.Packages.RetryCount -lt 0 -or [int]$configuration.Packages.RetryCount -gt 5) { throw 'Packages.RetryCount deve ficar entre 0 e 5.' }
     if ([string]::IsNullOrWhiteSpace([string]$configuration.Packages.OfflineManifest)) { throw 'Packages.OfflineManifest nao pode ficar vazio.' }
     if (-not $configuration.Runtime.StopOnError -or -not $configuration.Runtime.RequirePlanBeforeApply) { throw 'Runtime deve interromper em erro e exigir plano antes da aplicacao.' }
+    if (-not ($configuration.Runtime.ExecutionLogEnabled -is [bool])) { throw 'Runtime.ExecutionLogEnabled deve ser booleano.' }
     foreach ($integrationName in @('HyperV','Docker','Steam','Epic')) {
         Assert-PcSetupTableKey -Table $configuration.Storage.Integrations -Key $integrationName -Path 'config.Storage.Integrations'
         $integration = $configuration.Storage.Integrations[$integrationName]

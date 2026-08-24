@@ -28,6 +28,7 @@ Assert-True ($update -notmatch 'Read-Host\s+.*Quer reconciliar') 'O WSL nao deve
 Assert-True ($assisted -match '\[switch\]\$NoPause' -and $assisted -match "ValidateSet\('INSTALAR\.cmd','ATUALIZAR\.cmd'\)") 'O fluxo protegido deve suportar composicao sem perder retomada apos reinicio.'
 Assert-True ($assisted -match 'Write-PcSetupFailureDiagnostic' -and $assisted -match 'last-error\.json' -and $assisted -match 'ScriptStackTrace') 'O processo elevado deve persistir a mensagem e o contexto da falha.'
 Assert-True ($update -match 'Get-PcSetupWindowsFailureDiagnostic' -and $update -match 'Detalhe:.*failure\.Message' -and $update -match 'Diagnostico:.*failure\.Path') 'O orquestrador deve recuperar e mostrar o erro do processo elevado na janela principal.'
+Assert-True ($update -match 'PcSetup\.ExecutionLog\.psm1' -and $update -match 'Write-PcSetupExecutionEvent' -and $update -match 'Log da sessao') 'O orquestrador deve registrar e apresentar o log cronologico sanitizado.'
 Assert-True ($assisted -match "'verify-'" -and $assisted -match "Where-Object Status -eq 'FAIL'" -and $assisted -match '\$failedDetails') 'Falhas da verificacao final devem ser convertidas em diagnostico legivel.'
 Assert-True ($update -match "'verify-\*\.json'" -and $update -match '\$report\.Checks' -and $update -match 'A validacao final encontrou') 'O orquestrador deve usar o relatorio Verify como fallback de diagnostico.'
 Assert-True ($bootstrap -match "Stage -in @\('Starting', 'RestartRequired'\)") 'A retomada apos reinicio deve reconvergir os recursos do Windows antes de continuar.'

@@ -40,8 +40,11 @@ Para testar a pergunta sobre um segundo disco, conecte um segundo VHDX à VM e, 
 9. Dê duplo clique em `INSTALAR.cmd`, confira o plano e confirme apenas se estiver correto.
 10. Quando solicitado, reinicie e execute `INSTALAR.cmd` novamente.
 11. Confirme que Windows, WSL, usuário Linux diário, `agent` e o serviço `ai-memory` foram validados.
-12. Execute `AGENTE.cmd`, escolha um projeto descartável e confirme que o agente enxerga somente o workspace liberado e encontra as ferramentas MCP do `ai-memory`.
-13. Altere uma opção não destrutiva da configuração e execute `ATUALIZAR.cmd` para validar a reconciliação.
+12. Na conta diária, execute `TESTAR-INTEGRACAO.cmd`; forneça a credencial administrativa somente ao UAC do `verify.ps1` e confira o relatório `integration-test-*.json` indicado no final.
+13. Execute `AGENTE.cmd`, escolha um projeto descartável e confirme que o agente enxerga somente o workspace liberado e encontra as ferramentas MCP do `ai-memory`.
+14. Altere uma opção não destrutiva da configuração e execute `ATUALIZAR.cmd` para validar a reconciliação.
+
+`TESTAR-INTEGRACAO.cmd` automatiza a suíte, o verificador elevado do Windows e os verificadores WSL sem aplicar configurações. A criação da VM, os reinícios, o primeiro logon e a inspeção dos navegadores continuam manuais. Runners hospedados do GitHub não oferecem a combinação de Hyper-V, UAC, reinícios e virtualização aninhada necessária para reproduzir esse laboratório integral.
 
 Se pacotes, personalização ou WSL falharem depois que o Windows terminar, corrija a causa e execute o mesmo arquivo novamente. A retomada deve informar que o Windows já foi aplicado e executar apenas as fases da conta diária. Se a configuração, os scripts ou o prazo do comprovante protegido tiverem mudado, o Windows será planejado novamente.
 
@@ -56,7 +59,7 @@ Se pacotes, personalização ou WSL falharem depois que o Windows terminar, corr
 - a distribuição `Ubuntu-24.04` usa o usuário diário como padrão;
 - o usuário Linux `agent` não tem `sudo`, mantém autenticação própria e usa o `ai-jail`;
 - o `ai-memory` responde somente em `127.0.0.1`, usa token local, registra MCP e hooks do Codex e continua saudável depois de reiniciar a distribuição;
-- os relatórios em `%ProgramData%\pc-setup` e `%LOCALAPPDATA%\pc-setup\reports` terminam com sucesso;
+- os relatórios em `%ProgramData%\pc-setup` e `%LOCALAPPDATA%\pc-setup\reports` terminam com sucesso, incluindo o log JSONL sanitizado e o teste integral;
 - Chrome aparece para `Publico`, enquanto pacotes configurados como `user` pertencem somente à conta diária;
 - uma segunda execução completa não duplica contas, diretórios ou configuração.
 
