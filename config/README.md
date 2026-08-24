@@ -73,6 +73,17 @@ Agent = @{
         Package        = '@openai/codex'
         Version        = 'latest'
     }
+    Memory = @{
+        Enabled            = $true
+        Repository         = 'akitaonrails/ai-memory'
+        Version            = 'latest'
+        Architecture       = 'x86_64'
+        Sha256             = ''
+        RequireAssetDigest = $true
+        Client             = 'codex'
+        ProjectStrategy    = 'repo-root'
+        ServerUrl          = 'http://127.0.0.1:49374'
+    }
     Workspace = @{
         Mode        = 'SelectedProjectOnly'
         DefaultPath = ''
@@ -107,6 +118,14 @@ Agent = @{
 
 `Harness` instala o pacote no prefixo NPM do usuário Linux `agent`. `latest` busca a versão atual em cada aplicação; uma versão SemVer exata fixa o resultado. `DefaultCommand` precisa corresponder ao executável fornecido pelo pacote.
 
+`Agent.Memory` instala a release nativa do `akitaonrails/ai-memory` no ambiente `Agent`, integra MCP e hooks ao cliente configurado e mantém o servidor em loopback. `latest` exige o digest SHA-256 publicado pela release; uma versão SemVer exata exige `Sha256` explícito. O perfil padrão usa `Client = 'codex'` e `ProjectStrategy = 'repo-root'`, evitando que mudanças para subdiretórios fragmentem a memória do mesmo repositório.
+
+Perfis antigos sem a seção `Memory` continuam válidos e recebem memória desabilitada em tempo de execução. Isso preserva a compatibilidade sem ativar persistência de dados silenciosamente.
+
+O token `AI_MEMORY_AUTH_TOKEN` do servidor não pertence ao PSD1. Ele é gerado durante o bootstrap, gravado somente em `~/.config/ai-memory/env` do usuário Linux do agente e protegido com modo `0600`. O estado fica em `~/.local/share/ai-memory`, também fora do Git. `ServerUrl` aceita somente `http://127.0.0.1:<porta>` porque este projeto não publica a memória na rede.
+
+Ao trocar o harness, altere `DefaultCommand`, `Harness` e `Memory.Client` juntos e confirme que a release atual do `ai-memory` suporta MCP e hooks para o cliente escolhido. A validação detalhada de arquivo MCP implementada pelo perfil padrão cobre o Codex; outros clientes continuam sujeitos ao contrato do instalador oficial.
+
 `Workspace.Mode = 'SelectedProjectOnly'` usa o diretório informado no launcher como fronteira da execução. `DefaultPath = ''` pergunta o caminho sempre; um caminho Windows ou WSL pode ser definido como padrão sem colocar credenciais no arquivo. O launcher canonicaliza o caminho e recusa raízes de sistema, homes inteiros, raízes de discos e as próprias raízes configuradas de projetos. Ele não tenta adivinhar se um subdiretório representa semanticamente um único projeto.
 
 Se `DefaultPath` for preenchido, aponte para um projeto abaixo da raiz, por exemplo `/home/agent/Dev/meu-projeto`, e não para `/home/agent/Dev`.
@@ -137,7 +156,7 @@ O fallback fica em `offline-installers.psd1`. Cada entrada exige `PackageId`, ca
 
 O perfil padrão liga `DailyUser` e `Agent` à mesma conta Windows e à mesma distribuição. Aplique os dois na conta diária, começando por `DailyUser`; consulte [`../wsl/README.md`](../wsl/README.md).
 
-O perfil `wsl\profiles\agent.psd1` declara usuário sem privilégios, workspace compartilhado e política de versão do `ai-jail`. Com `Version = 'latest'`, cada aplicação resolve a release estável atual pela API do GitHub e exige o digest SHA-256 do asset. Uma versão exata continua possível, mas exige `Sha256` explícito.
+O perfil `wsl\profiles\agent.psd1` declara usuário sem privilégios, workspace compartilhado e política de versão do `ai-jail`. A configuração de harness e memória é injetada a partir de `Agent`, evitando duas fontes de verdade. Com `Version = 'latest'`, cada aplicação resolve as releases estáveis atuais pela API do GitHub e exige o digest SHA-256 do asset. Uma versão exata continua possível, mas exige `Sha256` explícito.
 
 ## Inventário do Winget
 

@@ -49,7 +49,6 @@
             Development  = 'Dev'
             PersonalData = 'Data\{PrimaryUser}'
             Shared       = 'Shared'
-            Downloads    = 'Downloads'
             VirtualMachines = 'VMs'
             Containers   = 'Containers'
         }
@@ -84,6 +83,17 @@
             PackageManager = 'Npm'
             Package        = '@openai/codex'
             Version        = 'latest'
+        }
+        Memory = @{
+            Enabled            = $false
+            Repository         = 'akitaonrails/ai-memory'
+            Version            = 'latest'
+            Architecture       = 'x86_64'
+            Sha256             = ''
+            RequireAssetDigest = $true
+            Client             = 'codex'
+            ProjectStrategy    = 'repo-root'
+            ServerUrl          = 'http://127.0.0.1:49374'
         }
         Workspace = @{
             Mode        = 'SelectedProjectOnly'

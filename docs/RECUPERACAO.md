@@ -34,6 +34,14 @@ As fontes e o App Installer pertencem ao perfil que executa o Winget. Não use p
 
 Antes de processar os pacotes, o `pc-setup` atualiza automaticamente a fonte `winget` da conta diária. Os comandos acima permanecem úteis para diagnóstico manual caso o App Installer não consiga concluir essa atualização.
 
+O código `0x80072ee7`, acompanhado por `InternetOpenUrl() failed`, indica falha de resolução de nome ou conectividade, não ausência do pacote. Confirme que o navegador abre `https://cdn.winget.microsoft.com`, verifique data e hora, DNS, proxy ou VPN e execute novamente:
+
+```powershell
+winget source update --name winget
+```
+
+Depois, repita `INSTALAR.cmd` ou `ATUALIZAR.cmd`. Não é necessário recriar a VM. O setup não transforma uma falha de rede em download alternativo sem hash; se não existir fallback offline configurado para o pacote, ele interrompe com segurança.
+
 O Winget não é reiniciado com outra conta administrativa, pois as fontes e o App Installer pertencem ao perfil diário. O perfil padrão usa o instalador `user` do PowerShell. Instaladores `machine` que conseguem elevar a si mesmos ainda podem abrir UAC; se o próprio comando Winget exigir contexto administrativo, a tentativa online termina com diagnóstico e o fallback offline configurado é avaliado.
 
 ## ACLs
@@ -49,7 +57,7 @@ wsl.exe --shutdown
 wsl.exe --export Ubuntu-24.04 D:\Backups\Ubuntu-24.04.tar
 ```
 
-O arquivo exportado contém todo o filesystem da distribuição, inclusive homes e estado do agente. Proteja-o como dado sensível. A importação deve ser feita manualmente em outro nome ou depois de confirmar a substituição da distribuição afetada.
+O arquivo exportado contém todo o filesystem da distribuição, inclusive homes, credenciais do harness, token e dados do `ai-memory`. Proteja-o como dado sensível. A importação deve ser feita manualmente em outro nome ou depois de confirmar a substituição da distribuição afetada.
 
 ## Máquina virtual
 

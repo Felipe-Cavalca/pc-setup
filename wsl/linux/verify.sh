@@ -15,6 +15,14 @@ ai_jail_repository=''
 ai_jail_architecture=''
 ai_jail_sha256=''
 ai_jail_require_asset_digest='true'
+ai_memory_version=''
+ai_memory_repository=''
+ai_memory_architecture=''
+ai_memory_sha256=''
+ai_memory_require_asset_digest='true'
+ai_memory_client=''
+ai_memory_project_strategy=''
+ai_memory_server_url=''
 harness_command=''
 harness_package=''
 harness_version=''
@@ -39,6 +47,14 @@ while (($# > 0)); do
     --ai-jail-architecture) ai_jail_architecture="${2:-}"; shift 2 ;;
     --ai-jail-sha256) ai_jail_sha256="${2:-}"; shift 2 ;;
     --ai-jail-require-asset-digest) ai_jail_require_asset_digest="${2:-}"; shift 2 ;;
+    --ai-memory-repository) ai_memory_repository="${2:-}"; shift 2 ;;
+    --ai-memory-version) ai_memory_version="${2:-}"; shift 2 ;;
+    --ai-memory-architecture) ai_memory_architecture="${2:-}"; shift 2 ;;
+    --ai-memory-sha256) ai_memory_sha256="${2:-}"; shift 2 ;;
+    --ai-memory-require-asset-digest) ai_memory_require_asset_digest="${2:-}"; shift 2 ;;
+    --ai-memory-client) ai_memory_client="${2:-}"; shift 2 ;;
+    --ai-memory-project-strategy) ai_memory_project_strategy="${2:-}"; shift 2 ;;
+    --ai-memory-server-url) ai_memory_server_url="${2:-}"; shift 2 ;;
     --harness-command) harness_command="${2:-}"; shift 2 ;;
     --harness-package) harness_package="${2:-}"; shift 2 ;;
     --harness-version) harness_version="${2:-}"; shift 2 ;;
@@ -72,6 +88,20 @@ if [[ -n $ai_jail_version ]]; then
      [[ -n $ai_jail_sha256 && ! $ai_jail_sha256 =~ ^[a-fA-F0-9]{64}$ ]] ||
      [[ $ai_jail_require_asset_digest != true && $ai_jail_require_asset_digest != false ]]; then
     printf 'Invalid ai-jail release metadata.\n' >&2
+    exit 2
+  fi
+fi
+if [[ -n $ai_memory_version ]]; then
+  if [[ $ai_memory_version != latest && ! $ai_memory_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+     [[ ! $ai_memory_repository =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
+     [[ ! $ai_memory_architecture =~ ^[a-z0-9_]+$ ]] ||
+     [[ -n $ai_memory_sha256 && ! $ai_memory_sha256 =~ ^[a-fA-F0-9]{64}$ ]] ||
+     [[ $ai_memory_require_asset_digest != true && $ai_memory_require_asset_digest != false ]] ||
+     [[ ! $ai_memory_client =~ ^[a-z0-9][a-z0-9-]*$ ]] ||
+     [[ $ai_memory_project_strategy != repo-root && $ai_memory_project_strategy != basename ]] ||
+     [[ ! $ai_memory_server_url =~ ^http://127\.0\.0\.1:([1-9][0-9]{0,4})$ ]] ||
+     ((10#${BASH_REMATCH[1]:-0} > 65535)); then
+    printf 'Invalid ai-memory release or integration metadata.\n' >&2
     exit 2
   fi
 fi
@@ -238,6 +268,143 @@ if [[ -n $ai_jail_version ]]; then
     check 'ai-jail' 1 "$version_output; policy=$ai_jail_version; sha256=$binary_sha256; owner=$binary_owner mode=$binary_mode"
   else
     check 'ai-jail' 0 "policy=$ai_jail_version; latest=${ai_jail_resolved_version:-unresolved}; installed=${version_output:-missing}; binary=${binary:-missing}; owner=${binary_owner:-missing}; mode=${binary_mode:-missing}"
+  fi
+fi
+
+if [[ -n $ai_memory_version ]]; then
+  ai_memory_resolved_version=''
+  ai_memory_resolved_sha256=''
+  release_helper="$(dirname -- "${BASH_SOURCE[0]}")/github-release.sh"
+  if [[ ! -r $release_helper ]]; then
+    check 'ai-memory release helper' 0 "$release_helper missing"
+  else
+    # shellcheck source=wsl/linux/github-release.sh
+    source "$release_helper"
+    asset_name="ai-memory-linux-${ai_memory_architecture}.tar.gz"
+    IFS=$'\t' read -r ai_memory_resolved_version _ ai_memory_resolved_sha256 < <(
+      pcsetup_resolve_github_release_asset "$ai_memory_repository" "$ai_memory_version" "$asset_name" "$ai_memory_sha256" "$ai_memory_require_asset_digest"
+    )
+  fi
+  binary="$(command -v ai-memory || true)"
+  version_output="$(ai-memory --version 2>/dev/null || true)"
+  binary_target=''
+  binary_owner=''
+  binary_mode=''
+  binary_sha256=''
+  if [[ -L $binary ]]; then binary_target="$(readlink --canonicalize-existing -- "$binary" 2>/dev/null || true)"; fi
+  if [[ -n $binary_target ]]; then
+    binary_owner="$(stat --format='%U:%G' "$binary_target")"
+    binary_mode="$(stat --format='%a' "$binary_target")"
+    binary_sha256="$(sha256sum "$binary_target" | awk '{print $1}')"
+  fi
+  recorded_ai_memory_policy=''
+  recorded_ai_memory_repository=''
+  recorded_ai_memory_version=''
+  recorded_ai_memory_archive_sha256=''
+  recorded_ai_memory_binary_sha256=''
+  recorded_ai_memory_client=''
+  recorded_ai_memory_project_strategy=''
+  recorded_ai_memory_server_url=''
+  recorded_ai_memory_service=''
+  if [[ -f $manifest ]]; then
+    recorded_ai_memory_policy="$(awk -F '\t' '$1 == "ai_memory_policy" { print $2 }' "$manifest")"
+    recorded_ai_memory_repository="$(awk -F '\t' '$1 == "ai_memory_repository" { print $2 }' "$manifest")"
+    recorded_ai_memory_version="$(awk -F '\t' '$1 == "ai_memory_version" { print $2 }' "$manifest")"
+    recorded_ai_memory_archive_sha256="$(awk -F '\t' '$1 == "ai_memory_archive_sha256" { print $2 }' "$manifest")"
+    recorded_ai_memory_binary_sha256="$(awk -F '\t' '$1 == "ai_memory_binary_sha256" { print $2 }' "$manifest")"
+    recorded_ai_memory_client="$(awk -F '\t' '$1 == "ai_memory_client" { print $2 }' "$manifest")"
+    recorded_ai_memory_project_strategy="$(awk -F '\t' '$1 == "ai_memory_project_strategy" { print $2 }' "$manifest")"
+    recorded_ai_memory_server_url="$(awk -F '\t' '$1 == "ai_memory_server_url" { print $2 }' "$manifest")"
+    recorded_ai_memory_service="$(awk -F '\t' '$1 == "ai_memory_service" { print $2 }' "$manifest")"
+  fi
+  if [[ -n ${ai_memory_resolved_version:-} && $version_output =~ (^|[[:space:]])$ai_memory_resolved_version($|[[:space:]]) ]] &&
+     [[ $binary_target == /opt/pc-setup/ai-memory/*/ai-memory ]] &&
+     [[ $binary_owner == root:root && $binary_mode == 755 ]] &&
+     [[ $recorded_ai_memory_policy == "$ai_memory_version" && $recorded_ai_memory_repository == "$ai_memory_repository" ]] &&
+     [[ $recorded_ai_memory_version == "$ai_memory_resolved_version" && $recorded_ai_memory_archive_sha256 == "$ai_memory_resolved_sha256" ]] &&
+     [[ -n $binary_sha256 && $recorded_ai_memory_binary_sha256 == "$binary_sha256" ]] &&
+     [[ $recorded_ai_memory_client == "$ai_memory_client" && $recorded_ai_memory_project_strategy == "$ai_memory_project_strategy" ]] &&
+     [[ $recorded_ai_memory_server_url == "$ai_memory_server_url" ]] &&
+     [[ $(uname --machine) == "$ai_memory_architecture" ]]; then
+    check 'ai-memory binary' 1 "$version_output; policy=$ai_memory_version; sha256=$binary_sha256; owner=$binary_owner mode=$binary_mode"
+  else
+    check 'ai-memory binary' 0 "policy=$ai_memory_version; latest=${ai_memory_resolved_version:-unresolved}; installed=${version_output:-missing}; binary=${binary:-missing}; target=${binary_target:-missing}"
+  fi
+
+  ai_memory_home="/home/$linux_user"
+  ai_memory_data_directory="$ai_memory_home/.local/share/ai-memory"
+  ai_memory_config="$ai_memory_home/.config/ai-memory/config.toml"
+  ai_memory_env="$ai_memory_home/.config/ai-memory/env"
+  ai_memory_auth_token=''
+  if [[ -f $ai_memory_env ]]; then
+    ai_memory_auth_token="$(awk -F= '$1 == "AI_MEMORY_AUTH_TOKEN" { print substr($0, index($0, "=") + 1) }' "$ai_memory_env" | tail --lines=1)"
+  fi
+  config_owner=''
+  config_mode=''
+  env_owner=''
+  env_mode=''
+  if [[ -f $ai_memory_config ]]; then config_owner="$(stat --format='%U:%G' "$ai_memory_config")"; config_mode="$(stat --format='%a' "$ai_memory_config")"; fi
+  if [[ -f $ai_memory_env ]]; then env_owner="$(stat --format='%U:%G' "$ai_memory_env")"; env_mode="$(stat --format='%a' "$ai_memory_env")"; fi
+  if [[ -d $ai_memory_data_directory && $config_owner == "$linux_user:$linux_user" && $config_mode == 600 &&
+        $env_owner == "$linux_user:$linux_user" && $env_mode == 600 && $ai_memory_auth_token =~ ^[A-Za-z0-9._~-]{32,}$ ]]; then
+    check 'ai-memory state' 1 "data=$ai_memory_data_directory; config/env owner=$linux_user mode=600"
+  else
+    check 'ai-memory state' 0 "data=$ai_memory_data_directory; config=${config_owner:-missing}/${config_mode:-missing}; env=${env_owner:-missing}/${env_mode:-missing}"
+  fi
+
+  expected_service="pc-setup-ai-memory-${profile_name,,}.service"
+  service_path="/etc/systemd/system/$expected_service"
+  service_owner=''
+  service_mode=''
+  service_definition_ok=false
+  if [[ -f $service_path ]]; then service_owner="$(stat --format='%U:%G' "$service_path")"; service_mode="$(stat --format='%a' "$service_path")"; fi
+  if [[ -f $service_path ]] &&
+     grep --fixed-strings --line-regexp "User=$linux_user" "$service_path" >/dev/null &&
+     grep --fixed-strings --line-regexp "EnvironmentFile=$ai_memory_env" "$service_path" >/dev/null &&
+     grep --fixed-strings --line-regexp "ExecStart=/usr/local/bin/ai-memory --data-dir $ai_memory_data_directory --config $ai_memory_config serve --transport http --bind ${ai_memory_server_url#http://}" "$service_path" >/dev/null &&
+     grep --fixed-strings --line-regexp "ReadWritePaths=$ai_memory_data_directory" "$service_path" >/dev/null; then
+    service_definition_ok=true
+  fi
+  if [[ $(</proc/1/comm) == systemd ]] &&
+     [[ $recorded_ai_memory_service == "$expected_service" && $service_owner == root:root && $service_mode == 644 && $service_definition_ok == true ]] &&
+     systemctl is-enabled --quiet "$expected_service" && systemctl is-active --quiet "$expected_service"; then
+    check 'ai-memory service' 1 "$expected_service enabled and active on $ai_memory_server_url"
+  else
+    check 'ai-memory service' 0 "$expected_service; pid1=$(</proc/1/comm); owner=${service_owner:-missing}; mode=${service_mode:-missing}"
+  fi
+
+  hooks_directory="$ai_memory_data_directory/hooks/$ai_memory_client"
+  if [[ $ai_memory_client == codex ]]; then
+    client_config="$ai_memory_home/.codex/config.toml"
+    client_config_owner=''
+    client_config_mode=''
+    if [[ -f $client_config ]]; then
+      client_config_owner="$(stat --format='%U:%G' "$client_config")"
+      client_config_mode="$(stat --format='%a' "$client_config")"
+    fi
+  else
+    client_config='managed by upstream installer'
+    client_config_owner="$linux_user:$linux_user"
+    client_config_mode='not-applicable'
+  fi
+  client_mcp_ok=true
+  if [[ $ai_memory_client == codex ]] && ! grep --quiet 'ai-memory' "$client_config" 2>/dev/null; then
+    client_mcp_ok=false
+  fi
+  if [[ $client_config_owner == "$linux_user:$linux_user" ]] &&
+     [[ $ai_memory_client != codex || $client_config_mode == 600 ]] &&
+     [[ $client_mcp_ok == true ]] &&
+     [[ -d $hooks_directory ]]; then
+    check 'ai-memory integration' 1 "client=$ai_memory_client; strategy=$ai_memory_project_strategy; MCP and hooks installed; config_mode=$client_config_mode"
+  else
+    check 'ai-memory integration' 0 "client=$ai_memory_client; config=$client_config; owner=${client_config_owner:-missing}; mode=${client_config_mode:-missing}; hooks=$hooks_directory"
+  fi
+
+  if [[ $ai_memory_auth_token =~ ^[A-Za-z0-9._~-]{32,}$ ]] &&
+     runuser --user "$linux_user" -- env HOME="$ai_memory_home" AI_MEMORY_SERVER_URL="$ai_memory_server_url" AI_MEMORY_AUTH_TOKEN="$ai_memory_auth_token" /usr/local/bin/ai-memory status --json >/dev/null 2>&1; then
+    check 'ai-memory health' 1 "$ai_memory_server_url responded with authenticated status"
+  else
+    check 'ai-memory health' 0 "$ai_memory_server_url did not return authenticated status"
   fi
 fi
 

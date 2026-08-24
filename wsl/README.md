@@ -33,9 +33,9 @@ Depois aplique o perfil do agente:
 .\wsl\verify.ps1 -Environment Agent
 ```
 
-O segundo perfil reutiliza a distribuição, cria `agent`, bloqueia sua senha, remove participação em `sudo`, `wheel`, `docker` ou `lxd`, recusa regras diretas em sudoers, cria o workspace compartilhado e instala o harness configurado. No padrão, são usadas as versões estáveis atuais do `ai-jail` e de `@openai/codex`; ele não muda o usuário padrão do Ubuntu.
+O segundo perfil reutiliza a distribuição, cria `agent`, bloqueia sua senha, remove participação em `sudo`, `wheel`, `docker` ou `lxd`, recusa regras diretas em sudoers, cria o workspace compartilhado e instala o harness configurado. No padrão, são usadas as versões estáveis atuais do `ai-jail`, do `ai-memory` e de `@openai/codex`; ele não muda o usuário padrão do Ubuntu.
 
-O bootstrap é idempotente. As versões dos pacotes APT, do harness e a política solicitada ficam em `/var/lib/pc-setup/<ambiente>/installed.tsv`; os relatórios PowerShell ficam em `%LOCALAPPDATA%\pc-setup\reports`.
+O bootstrap é idempotente. As versões dos pacotes APT, do harness, do `ai-jail` e do `ai-memory`, além dos hashes verificados, ficam em `/var/lib/pc-setup/<ambiente>/installed.tsv`; os relatórios PowerShell ficam em `%LOCALAPPDATA%\pc-setup\reports`.
 
 ## Executar uma IA
 
@@ -47,11 +47,22 @@ O perfil padrão:
 - mantém Docker, SSH, interface gráfica, GPU, X11, memória compartilhada do host, Tailscale, Pictures, barramento `systemd --user`, ambiente herdado e terminal bruto bloqueados;
 - mantém home privado, Landlock, seccomp e limites de recursos habilitados;
 - recusa raízes de sistema, a raiz de um disco montado, homes inteiros, raízes configuradas de projetos e caminhos não canônicos;
-- libera escrita somente no projeto escolhido pelo `ai-jail`.
+- libera escrita no projeto escolhido e no diretório local de dados do `ai-memory` usado pelos hooks.
 
 O bootstrap instala ou atualiza o harness configurado. O comando padrão é `codex`; pacote, versão e comando podem ser trocados juntos em `Agent.Harness` e `Agent.DefaultCommand`.
 
 No primeiro `AGENTE.cmd`, faça a autenticação interativa do Codex quando solicitada. `PersistAgentState = $true` mantém essa sessão no home de `agent`; o setup não recebe nem grava a credencial no repositório. Credenciais Git também permanecem ausentes até serem configuradas manualmente para esse usuário Linux.
+
+O `ai-memory` é inicializado automaticamente para o usuário `agent`, protegido por token local e registrado no Codex por MCP e hooks. Seu serviço usa `systemd`, escuta somente em `http://127.0.0.1:49374` e persiste dados em `/home/agent/.local/share/ai-memory`. O token fica em `/home/agent/.config/ai-memory/env`, fora do Git e dos relatórios.
+
+Para verificar a memória ou encerrar explicitamente uma sessão do Codex:
+
+```bash
+ai-memory status --json
+ai-memory finalize-session
+```
+
+O segundo comando é manual porque o Codex ainda não oferece um evento confiável de encerramento real e podem existir sessões concorrentes no mesmo projeto. Para importar o contexto histórico de um repositório, comece com `ai-memory bootstrap --dry-run`; o setup não executa o bootstrap real porque ele pode consumir um provedor pago e o conteúdo inferido precisa ser revisado.
 
 Para executar manualmente outro comando instalado:
 
@@ -69,7 +80,9 @@ O workspace do agente pode ser aberto no Explorer por:
 \\wsl$\Ubuntu-24.04\home\agent\Dev
 ```
 
-Use `/mnt/d/Dev` quando o mesmo checkout precisar ser manipulado principalmente por programas Windows. Essa integração é conveniente, mas costuma ser mais lenta para builds Linux e pode expor diferenças de permissões e finais de linha.
+Os discos fixos do Windows são montados automaticamente no WSL. Quando o perfil escolhe `D:\` como raiz de dados, `D:\Dev` aparece como `/mnt/d/Dev`; no fallback de um disco, `C:\Dados\Dev` aparece como `/mnt/c/Dados/Dev`.
+
+Use esses caminhos sob `/mnt` quando o checkout precisar ser manipulado principalmente por programas Windows, IDEs nativas ou ferramentas que dependam de caminhos Windows. A integração é conveniente, mas costuma ser mais lenta para builds Linux e pode expor diferenças de permissões e finais de linha.
 
 Evite alternar ferramentas Windows e Linux sobre o mesmo checkout. Para projetos grandes, prefira clones ou worktrees separados.
 
@@ -98,6 +111,8 @@ WSL = @{
 
 O perfil `agent.psd1` usa `Version = 'latest'`: a aplicação consulta a release estável atual pela API oficial do GitHub, seleciona o asset x86_64, exige o digest SHA-256 publicado, verifica o arquivo e registra versão, hash do arquivo e hash do binário instalado. Uma versão SemVer exata com SHA-256 explícito também é aceita. ARM64 ainda não é suportado pelo perfil versionado; esse trabalho permanece registrado na [issue #2](https://github.com/Felipe-Cavalca/pc-setup/issues/2).
 
+`Agent.Memory` em `config\machine.psd1` controla o `ai-memory`. O padrão usa a release `latest`, cliente `codex`, estratégia `repo-root` e servidor somente em loopback. O bootstrap injeta essa configuração no perfil `Agent`, habilita `systemd` no WSL e valida binário, hash, permissões, unidade, MCP, hooks e resposta autenticada. Para outro agente, altere também o harness e confirme o suporte do cliente na documentação oficial.
+
 ## Limite do isolamento
 
 `ai-jail` é um sandbox de processo. Ele reduz o acesso ao filesystem e às capacidades do host, mas não equivale a uma VM com outro kernel. Para código hostil ou desconhecido, use uma VM descartável. Nenhuma VM é criada por padrão.
@@ -107,6 +122,8 @@ Consulte também [`../docs/AGENTE-IA.md`](../docs/AGENTE-IA.md).
 ## Referências
 
 - [ai-jail](https://github.com/akitaonrails/ai-jail)
+- [ai-memory](https://github.com/akitaonrails/ai-memory)
+- [Instalação e integração do ai-memory](https://github.com/akitaonrails/ai-memory/blob/main/docs/install.md)
 - [Codex CLI](https://github.com/openai/codex)
 - [Instalar e atualizar o Codex CLI](https://help.openai.com/en/articles/11096431)
 - [Arquivos entre Windows e WSL](https://learn.microsoft.com/windows/wsl/filesystems)

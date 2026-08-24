@@ -15,6 +15,14 @@ ai_jail_repository=''
 ai_jail_architecture=''
 ai_jail_sha256=''
 ai_jail_require_asset_digest='true'
+ai_memory_version=''
+ai_memory_repository=''
+ai_memory_architecture=''
+ai_memory_sha256=''
+ai_memory_require_asset_digest='true'
+ai_memory_client=''
+ai_memory_project_strategy=''
+ai_memory_server_url=''
 harness_command=''
 harness_package=''
 harness_version=''
@@ -46,6 +54,14 @@ while (($# > 0)); do
     --ai-jail-architecture) ai_jail_architecture="${2:-}"; shift 2 ;;
     --ai-jail-sha256) ai_jail_sha256="${2:-}"; shift 2 ;;
     --ai-jail-require-asset-digest) ai_jail_require_asset_digest="${2:-}"; shift 2 ;;
+    --ai-memory-repository) ai_memory_repository="${2:-}"; shift 2 ;;
+    --ai-memory-version) ai_memory_version="${2:-}"; shift 2 ;;
+    --ai-memory-architecture) ai_memory_architecture="${2:-}"; shift 2 ;;
+    --ai-memory-sha256) ai_memory_sha256="${2:-}"; shift 2 ;;
+    --ai-memory-require-asset-digest) ai_memory_require_asset_digest="${2:-}"; shift 2 ;;
+    --ai-memory-client) ai_memory_client="${2:-}"; shift 2 ;;
+    --ai-memory-project-strategy) ai_memory_project_strategy="${2:-}"; shift 2 ;;
+    --ai-memory-server-url) ai_memory_server_url="${2:-}"; shift 2 ;;
     --harness-command) harness_command="${2:-}"; shift 2 ;;
     --harness-package) harness_package="${2:-}"; shift 2 ;;
     --harness-version) harness_version="${2:-}"; shift 2 ;;
@@ -109,6 +125,24 @@ if [[ -n $ai_jail_version ]]; then
   fi
   if [[ $ai_jail_version != latest && ! $ai_jail_sha256 =~ ^[a-fA-F0-9]{64}$ ]]; then
     printf 'An exact ai-jail release requires a configured SHA-256.\n' >&2
+    exit 2
+  fi
+fi
+if [[ -n $ai_memory_version ]]; then
+  if [[ $ai_memory_version != latest && ! $ai_memory_version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+     [[ ! $ai_memory_repository =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
+     [[ ! $ai_memory_architecture =~ ^[a-z0-9_]+$ ]] ||
+     [[ -n $ai_memory_sha256 && ! $ai_memory_sha256 =~ ^[a-fA-F0-9]{64}$ ]] ||
+     [[ $ai_memory_require_asset_digest != true && $ai_memory_require_asset_digest != false ]] ||
+     [[ ! $ai_memory_client =~ ^[a-z0-9][a-z0-9-]*$ ]] ||
+     [[ $ai_memory_project_strategy != repo-root && $ai_memory_project_strategy != basename ]] ||
+     [[ ! $ai_memory_server_url =~ ^http://127\.0\.0\.1:([1-9][0-9]{0,4})$ ]] ||
+     ((10#${BASH_REMATCH[1]:-0} > 65535)); then
+    printf 'Invalid ai-memory release or integration metadata.\n' >&2
+    exit 2
+  fi
+  if [[ $ai_memory_version != latest && ! $ai_memory_sha256 =~ ^[a-fA-F0-9]{64}$ ]]; then
+    printf 'An exact ai-memory release requires a configured SHA-256.\n' >&2
     exit 2
   fi
 fi
@@ -202,6 +236,36 @@ if [[ $set_default_user == true ]]; then
   install --owner root --group root --mode 0644 "$temporary_wsl_config" "$wsl_config"
 fi
 
+if [[ -n $ai_memory_version ]]; then
+  wsl_config='/etc/wsl.conf'
+  temporary_wsl_systemd_config="$(mktemp)"
+  temporary_paths+=("$temporary_wsl_systemd_config")
+  if [[ -f $wsl_config ]]; then
+    awk '
+    BEGIN { in_boot = 0; boot_seen = 0; systemd_written = 0 }
+    /^\[[^]]+\][[:space:]]*$/ {
+      if (in_boot && !systemd_written) { print "systemd=true"; systemd_written = 1 }
+      in_boot = ($0 ~ /^\[boot\][[:space:]]*$/)
+      if (in_boot) { boot_seen = 1 }
+      print
+      next
+    }
+    in_boot && /^[[:space:]]*systemd[[:space:]]*=/ {
+      if (!systemd_written) { print "systemd=true"; systemd_written = 1 }
+      next
+    }
+    { print }
+    END {
+      if (in_boot && !systemd_written) { print "systemd=true" }
+      if (!boot_seen) { print ""; print "[boot]"; print "systemd=true" }
+    }
+    ' "$wsl_config" >"$temporary_wsl_systemd_config"
+  else
+    printf '[boot]\nsystemd=true\n' >"$temporary_wsl_systemd_config"
+  fi
+  install --owner root --group root --mode 0644 "$temporary_wsl_systemd_config" "$wsl_config"
+fi
+
 if ((${#packages[@]} > 0)); then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
@@ -283,6 +347,95 @@ if [[ -n $ai_jail_version ]]; then
   ai_jail_binary_sha256="$(sha256sum /usr/local/bin/ai-jail | awk '{print $1}')"
 fi
 
+if [[ -n $ai_memory_version ]]; then
+  ai_memory_resolved_version=''
+  ai_memory_url=''
+  ai_memory_resolved_sha256=''
+  actual_architecture="$(uname --machine)"
+  if [[ $actual_architecture != "$ai_memory_architecture" ]]; then
+    printf 'ai-memory architecture mismatch: configured=%s actual=%s\n' "$ai_memory_architecture" "$actual_architecture" >&2
+    exit 1
+  fi
+  release_helper="$(dirname -- "${BASH_SOURCE[0]}")/github-release.sh"
+  if [[ ! -r $release_helper ]]; then
+    printf 'GitHub release helper is missing: %s\n' "$release_helper" >&2
+    exit 1
+  fi
+  # shellcheck source=wsl/linux/github-release.sh
+  source "$release_helper"
+  asset_name="ai-memory-linux-${ai_memory_architecture}.tar.gz"
+  IFS=$'\t' read -r ai_memory_resolved_version ai_memory_url ai_memory_resolved_sha256 < <(
+    pcsetup_resolve_github_release_asset "$ai_memory_repository" "$ai_memory_version" "$asset_name" "$ai_memory_sha256" "$ai_memory_require_asset_digest"
+  )
+  if [[ -z $ai_memory_resolved_version || -z $ai_memory_url || -z $ai_memory_resolved_sha256 ]]; then
+    printf 'Could not resolve trusted ai-memory release metadata.\n' >&2
+    exit 1
+  fi
+
+  previous_manifest="$state_directory/installed.tsv"
+  ai_memory_install_directory="/opt/pc-setup/ai-memory/$ai_memory_resolved_version"
+  ai_memory_managed_binary="$ai_memory_install_directory/ai-memory"
+  installed_binary_sha256=''
+  if [[ -x /usr/local/bin/ai-memory ]]; then installed_binary_sha256="$(sha256sum /usr/local/bin/ai-memory | awk '{print $1}')"; fi
+  recorded_ai_memory_binary_sha256=''
+  recorded_ai_memory_archive_sha256=''
+  if [[ -f $previous_manifest ]]; then
+    recorded_ai_memory_binary_sha256="$(awk -F '\t' '$1 == "ai_memory_binary_sha256" { print $2 }' "$previous_manifest")"
+    recorded_ai_memory_archive_sha256="$(awk -F '\t' '$1 == "ai_memory_archive_sha256" { print $2 }' "$previous_manifest")"
+  fi
+  ai_memory_needs_install=true
+  if [[ -x $ai_memory_managed_binary ]] &&
+     /usr/local/bin/ai-memory --version 2>/dev/null | grep --extended-regexp "(^| )${ai_memory_resolved_version}($| )" >/dev/null &&
+     [[ $recorded_ai_memory_archive_sha256 == "$ai_memory_resolved_sha256" ]] &&
+     [[ -n $recorded_ai_memory_binary_sha256 && $installed_binary_sha256 == "$recorded_ai_memory_binary_sha256" ]]; then
+    ai_memory_needs_install=false
+  fi
+  if [[ $ai_memory_needs_install == true ]]; then
+    temporary_ai_memory="$(mktemp --directory)"
+    temporary_paths+=("$temporary_ai_memory")
+    archive="$temporary_ai_memory/ai-memory.tar.gz"
+    curl --fail --location --silent --show-error "$ai_memory_url" --output "$archive"
+    printf '%s  %s\n' "$ai_memory_resolved_sha256" "$archive" | sha256sum --check --status
+    if tar --list --gzip --file "$archive" | grep --extended-regexp '(^/|(^|/)\.\.(/|$))' >/dev/null; then
+      printf 'The ai-memory archive contains an unsafe path.\n' >&2
+      exit 1
+    fi
+    if tar --list --verbose --gzip --file "$archive" | awk '$1 !~ /^[-d]/ { unsafe = 1 } END { exit unsafe ? 0 : 1 }'; then
+      printf 'The ai-memory archive contains a link or unsupported entry type.\n' >&2
+      exit 1
+    fi
+    tar --extract --gzip --no-same-owner --no-same-permissions --file "$archive" --directory "$temporary_ai_memory"
+    binary="$(find "$temporary_ai_memory" -maxdepth 3 -type f -name ai-memory -print -quit)"
+    if [[ -z $binary ]]; then
+      printf 'ai-memory binary missing from release archive.\n' >&2
+      exit 1
+    fi
+    release_root="$(dirname -- "$binary")"
+    install --directory --owner root --group root --mode 0755 "$ai_memory_install_directory"
+    cp --archive --no-preserve=ownership "$release_root/." "$ai_memory_install_directory/"
+    chown --recursive root:root "$ai_memory_install_directory"
+    chmod 0755 "$ai_memory_managed_binary"
+  fi
+  ai_memory_launcher='/usr/local/bin/ai-memory'
+  if [[ -e $ai_memory_launcher && ! -L $ai_memory_launcher ]]; then
+    printf 'Refusing to replace unmanaged ai-memory command: %s\n' "$ai_memory_launcher" >&2
+    exit 1
+  fi
+  if [[ -L $ai_memory_launcher ]]; then
+    existing_target="$(readlink --canonicalize-missing -- "$ai_memory_launcher")"
+    if [[ $existing_target != /opt/pc-setup/ai-memory/* ]]; then
+      printf 'Refusing to replace ai-memory symlink outside the managed prefix: %s -> %s\n' "$ai_memory_launcher" "$existing_target" >&2
+      exit 1
+    fi
+  fi
+  ln --symbolic --force "$ai_memory_managed_binary" "$ai_memory_launcher"
+  if ! ai-memory --version 2>/dev/null | grep --extended-regexp "(^| )${ai_memory_resolved_version}($| )" >/dev/null; then
+    printf 'Installed ai-memory version does not match %s.\n' "$ai_memory_resolved_version" >&2
+    exit 1
+  fi
+  ai_memory_binary_sha256="$(sha256sum "$ai_memory_managed_binary" | awk '{print $1}')"
+fi
+
 if [[ -n $harness_command ]]; then
   npm_prefix="/home/$linux_user/.local"
   install --directory --owner "$linux_user" --group "$linux_user" --mode 0755 "$npm_prefix"
@@ -330,6 +483,94 @@ if [[ -n $harness_command ]]; then
   fi
 fi
 
+if [[ -n $ai_memory_version ]]; then
+  ai_memory_home="/home/$linux_user"
+  ai_memory_data_directory="$ai_memory_home/.local/share/ai-memory"
+  ai_memory_config_directory="$ai_memory_home/.config/ai-memory"
+  ai_memory_config="$ai_memory_config_directory/config.toml"
+  ai_memory_env="$ai_memory_config_directory/env"
+  install --directory --owner "$linux_user" --group "$linux_user" --mode 0700 "$ai_memory_data_directory" "$ai_memory_config_directory"
+
+  if [[ ! -f $ai_memory_config ]]; then
+    runuser --user "$linux_user" -- env HOME="$ai_memory_home" \
+      /usr/local/bin/ai-memory --data-dir "$ai_memory_data_directory" --config "$ai_memory_config" init
+  fi
+  if [[ ! -f $ai_memory_env ]] || ! grep --quiet '^AI_MEMORY_AUTH_TOKEN=' "$ai_memory_env"; then
+    ai_memory_auth_token="$(runuser --user "$linux_user" -- env HOME="$ai_memory_home" /usr/local/bin/ai-memory generate-auth-token)"
+    if [[ ! $ai_memory_auth_token =~ ^[A-Za-z0-9._~-]{32,}$ ]]; then
+      printf 'ai-memory generated an invalid authentication token.\n' >&2
+      exit 1
+    fi
+    printf 'AI_MEMORY_AUTH_TOKEN=%s\n' "$ai_memory_auth_token" >>"$ai_memory_env"
+  fi
+  ai_memory_auth_token="$(awk -F= '$1 == "AI_MEMORY_AUTH_TOKEN" { print substr($0, index($0, "=") + 1) }' "$ai_memory_env" | tail --lines=1)"
+  if [[ ! $ai_memory_auth_token =~ ^[A-Za-z0-9._~-]{32,}$ ]]; then
+    printf 'ai-memory authentication token is missing or invalid.\n' >&2
+    exit 1
+  fi
+  chown "$linux_user:$linux_user" "$ai_memory_config" "$ai_memory_env"
+  chmod 0600 "$ai_memory_config" "$ai_memory_env"
+
+  runuser --user "$linux_user" -- env \
+    HOME="$ai_memory_home" \
+    AI_MEMORY_SERVER_URL="$ai_memory_server_url" \
+    AI_MEMORY_AUTH_TOKEN="$ai_memory_auth_token" \
+    /usr/local/bin/ai-memory install-mcp --client "$ai_memory_client" --apply
+  runuser --user "$linux_user" -- env \
+    HOME="$ai_memory_home" \
+    AI_MEMORY_SERVER_URL="$ai_memory_server_url" \
+    AI_MEMORY_AUTH_TOKEN="$ai_memory_auth_token" \
+    /usr/local/bin/ai-memory install-hooks --agent "$ai_memory_client" --project-strategy "$ai_memory_project_strategy" --apply
+
+  if [[ $ai_memory_client == codex ]]; then
+    codex_config_directory="$ai_memory_home/.codex"
+    codex_config="$codex_config_directory/config.toml"
+    install --directory --owner "$linux_user" --group "$linux_user" --mode 0700 "$codex_config_directory"
+    if [[ ! -f $codex_config ]]; then
+      printf 'ai-memory did not create the expected Codex MCP configuration: %s\n' "$codex_config" >&2
+      exit 1
+    fi
+    chown "$linux_user:$linux_user" "$codex_config"
+    chmod 0600 "$codex_config"
+  fi
+
+  ai_memory_service="pc-setup-ai-memory-${profile_name,,}.service"
+  ai_memory_service_path="/etc/systemd/system/$ai_memory_service"
+  ai_memory_bind="${ai_memory_server_url#http://}"
+  temporary_service="$(mktemp)"
+  temporary_paths+=("$temporary_service")
+  cat >"$temporary_service" <<EOF
+[Unit]
+Description=pc-setup ai-memory ($profile_name)
+After=network-online.target
+
+[Service]
+Type=simple
+User=$linux_user
+Group=$linux_user
+Environment=HOME=$ai_memory_home
+EnvironmentFile=$ai_memory_env
+ExecStart=/usr/local/bin/ai-memory --data-dir $ai_memory_data_directory --config $ai_memory_config serve --transport http --bind $ai_memory_bind
+Restart=on-failure
+RestartSec=2
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=$ai_memory_data_directory
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  install --owner root --group root --mode 0644 "$temporary_service" "$ai_memory_service_path"
+  systemctl enable --no-reload "$ai_memory_service" >/dev/null
+  if [[ $(</proc/1/comm) == systemd ]]; then
+    systemctl daemon-reload
+    systemctl restart "$ai_memory_service"
+  fi
+fi
+
 temporary_manifest="$(mktemp)"
 temporary_paths+=("$temporary_manifest")
 {
@@ -352,6 +593,17 @@ temporary_paths+=("$temporary_manifest")
     printf 'ai_jail_version\t%s\n' "$ai_jail_resolved_version"
     printf 'ai_jail_archive_sha256\t%s\n' "$ai_jail_resolved_sha256"
     printf 'ai_jail_binary_sha256\t%s\n' "$ai_jail_binary_sha256"
+  fi
+  if [[ -n $ai_memory_version ]]; then
+    printf 'ai_memory_policy\t%s\n' "$ai_memory_version"
+    printf 'ai_memory_repository\t%s\n' "$ai_memory_repository"
+    printf 'ai_memory_version\t%s\n' "$ai_memory_resolved_version"
+    printf 'ai_memory_archive_sha256\t%s\n' "$ai_memory_resolved_sha256"
+    printf 'ai_memory_binary_sha256\t%s\n' "$ai_memory_binary_sha256"
+    printf 'ai_memory_client\t%s\n' "$ai_memory_client"
+    printf 'ai_memory_project_strategy\t%s\n' "$ai_memory_project_strategy"
+    printf 'ai_memory_server_url\t%s\n' "$ai_memory_server_url"
+    printf 'ai_memory_service\t%s\n' "$ai_memory_service"
   fi
   if [[ -n $harness_command ]]; then
     printf 'harness_command\t%s\n' "$harness_command"

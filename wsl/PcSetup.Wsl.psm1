@@ -125,6 +125,18 @@ function Invoke-PcSetupWslLinuxScript {
             '--ai-jail-require-asset-digest', ([string][bool]$Profile.AiJail.RequireAssetDigest).ToLowerInvariant()
         )
     }
+    if ($Profile.ContainsKey('AiMemory') -and $Profile.AiMemory.Enabled) {
+        $arguments += @(
+            '--ai-memory-repository', [string]$Profile.AiMemory.Repository,
+            '--ai-memory-version', [string]$Profile.AiMemory.Version,
+            '--ai-memory-architecture', [string]$Profile.AiMemory.Architecture,
+            '--ai-memory-sha256', [string]$Profile.AiMemory.Sha256,
+            '--ai-memory-require-asset-digest', ([string][bool]$Profile.AiMemory.RequireAssetDigest).ToLowerInvariant(),
+            '--ai-memory-client', [string]$Profile.AiMemory.Client,
+            '--ai-memory-project-strategy', [string]$Profile.AiMemory.ProjectStrategy,
+            '--ai-memory-server-url', [string]$Profile.AiMemory.ServerUrl
+        )
+    }
     if ($Profile.ContainsKey('Harness') -and $Profile.Harness.Enabled) {
         $arguments += @(
             '--harness-command', [string]$Profile.Harness.Command,

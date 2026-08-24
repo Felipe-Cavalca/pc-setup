@@ -39,8 +39,8 @@ Para testar a pergunta sobre um segundo disco, conecte um segundo VHDX à VM e, 
 8. Execute `tests\run-all.ps1` no Windows PowerShell 5.1.
 9. Dê duplo clique em `INSTALAR.cmd`, confira o plano e confirme apenas se estiver correto.
 10. Quando solicitado, reinicie e execute `INSTALAR.cmd` novamente.
-11. Confirme que Windows, WSL, usuário Linux diário e `agent` foram validados.
-12. Execute `AGENTE.cmd`, escolha um projeto descartável e confirme que o agente enxerga somente o workspace liberado.
+11. Confirme que Windows, WSL, usuário Linux diário, `agent` e o serviço `ai-memory` foram validados.
+12. Execute `AGENTE.cmd`, escolha um projeto descartável e confirme que o agente enxerga somente o workspace liberado e encontra as ferramentas MCP do `ai-memory`.
 13. Altere uma opção não destrutiva da configuração e execute `ATUALIZAR.cmd` para validar a reconciliação.
 
 Se pacotes, personalização ou WSL falharem depois que o Windows terminar, corrija a causa e execute o mesmo arquivo novamente. A retomada deve informar que o Windows já foi aplicado e executar apenas as fases da conta diária. Se a configuração, os scripts ou o prazo do comprovante protegido tiverem mudado, o Windows será planejado novamente.
@@ -55,6 +55,7 @@ Se pacotes, personalização ou WSL falharem depois que o Windows terminar, corr
 - `Publico` é usuário padrão e recebe Edge e Chrome;
 - a distribuição `Ubuntu-24.04` usa o usuário diário como padrão;
 - o usuário Linux `agent` não tem `sudo`, mantém autenticação própria e usa o `ai-jail`;
+- o `ai-memory` responde somente em `127.0.0.1`, usa token local, registra MCP e hooks do Codex e continua saudável depois de reiniciar a distribuição;
 - os relatórios em `%ProgramData%\pc-setup` e `%LOCALAPPDATA%\pc-setup\reports` terminam com sucesso;
 - Chrome aparece para `Publico`, enquanto pacotes configurados como `user` pertencem somente à conta diária;
 - uma segunda execução completa não duplica contas, diretórios ou configuração.

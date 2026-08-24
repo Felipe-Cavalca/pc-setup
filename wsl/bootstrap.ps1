@@ -26,7 +26,8 @@ $planItems = @(
     "ProjectRoot=$($profile.ProjectRoot)",
     "Packages=$(@($profile.Packages).Count)",
     "DefaultUser=$([bool]$profile.SetAsDefaultUser)",
-    "AiJail=$([bool]($profile.ContainsKey('AiJail') -and $profile.AiJail.Enabled))"
+    "AiJail=$([bool]($profile.ContainsKey('AiJail') -and $profile.AiJail.Enabled))",
+    "AiMemory=$([bool]($profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled))"
 )
 if ($profile.ContainsKey('Harness') -and $profile.Harness.Enabled) {
     $planItems += "Harness=$($profile.Harness.Package)@$($profile.Harness.Version) ($($profile.Harness.Command))"
@@ -79,6 +80,7 @@ $report = [ordered]@{
     ProjectRoot    = $profile.ProjectRoot
     Packages       = @($profile.Packages)
     AiJail         = if ($profile.ContainsKey('AiJail')) { $profile.AiJail } else { $null }
+    AiMemory       = if ($profile.ContainsKey('AiMemory')) { $profile.AiMemory } else { $null }
     Harness        = if ($profile.ContainsKey('Harness')) { $profile.Harness } else { $null }
     InstalledState = $installedState
     InstalledNow   = $installedNow

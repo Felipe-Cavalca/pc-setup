@@ -2,7 +2,7 @@
 
 ## Escopo suportado
 
-O perfil padrão suporta Windows 11 Pro com `EditionID = Professional`, build 22000 ou superior e arquitetura x64. Hyper-V, Windows Sandbox e WSL dependem de virtualização habilitada e hardware compatível. O perfil do `ai-jail` publicado neste repositório suporta somente Linux x86_64.
+O perfil padrão suporta Windows 11 Pro com `EditionID = Professional`, build 22000 ou superior e arquitetura x64. Hyper-V, Windows Sandbox e WSL dependem de virtualização habilitada e hardware compatível. Os perfis de `ai-jail` e `ai-memory` publicados neste repositório usam Linux x86_64.
 
 O projeto executa etapas administrativas e baixa software de terceiros. Revise `config/machine.psd1`, o plano gerado e os IDs de pacote antes de aplicar. Teste alterações em VM.
 
@@ -12,15 +12,20 @@ O projeto executa etapas administrativas e baixa software de terceiros. Revise `
 - Winget usa a fonte configurada no Windows e escopo explícito;
 - instaladores offline exigem caminho permitido, escopo e SHA-256 revisado;
 - `ai-jail` em política `latest` exige o digest SHA-256 publicado pela API de releases do GitHub;
+- `ai-memory` em política `latest` exige o digest SHA-256 publicado, escuta somente em `127.0.0.1` e usa um token gerado localmente;
 - debloat permanece fixado por tag e SHA-256 e exige confirmação separada;
 - o usuário Linux `agent` não recebe senha utilizável, sudo, Docker ou LXD;
 - uma VM descartável continua obrigatória para malware ou código deliberadamente hostil.
 
 Um hash confirma integridade do arquivo obtido, mas não substitui confiança no fornecedor, na conta do projeto ou na infraestrutura de distribuição.
 
-## Dados sensíveis
+## Memória e dados sensíveis
 
 Não abra issue, commit ou relatório público contendo senhas, tokens, cookies, chaves, `.env`, arquivos exportados do WSL ou discos de VM. Relatórios locais podem conter nomes de usuários, caminhos, programas e informações do hardware.
+
+O `ai-memory` pode registrar prompts, respostas, eventos de ferramentas e resumos. As regras de negação do `ai-jail` reduzem o acesso direto a arquivos conhecidos, mas não removem um segredo que tenha sido colado no prompt ou apareça na saída de uma ferramenta. Trate `~/.local/share/ai-memory`, `~/.config/ai-memory/env`, a configuração do cliente e qualquer exportação da distribuição WSL como dados sensíveis.
+
+Memória de agente é contexto histórico, não fonte de verdade. Código, testes, documentação revisada e estado observado da máquina continuam tendo precedência sobre recordações geradas ou consolidadas por IA.
 
 ## Reportar uma vulnerabilidade
 
