@@ -12,6 +12,8 @@ function Invoke-PcSetupRobocopy {
     & "$env:SystemRoot\System32\robocopy.exe" $Source $Destination /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /XJ /NP /NFL /NDL | Out-Host
     $exitCode = $LASTEXITCODE
     if ($exitCode -gt 7) { throw "Robocopy falhou com codigo $exitCode ao copiar $Source." }
+    # Robocopy usa 1 a 7 para resultados bem-sucedidos; nao deixe esse codigo residual falhar a etapa da CI.
+    $global:LASTEXITCODE = 0
     return $exitCode
 }
 

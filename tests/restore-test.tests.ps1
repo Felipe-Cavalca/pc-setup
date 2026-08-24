@@ -20,6 +20,7 @@ try {
     $restoreRoot = Join-Path $temporaryRoot 'destino'
     $result = Invoke-PcSetupRestoreTest -SnapshotPath $snapshot -DestinationRoot $restoreRoot -KeepRestoredCopy $false
     Assert-True ($result.Valid -and $result.Files -eq 1) 'A copia restaurada deve ser validada integralmente.'
+    Assert-True ($LASTEXITCODE -eq 0) 'Um codigo de sucesso do Robocopy nao pode contaminar a saida do PowerShell.'
     Assert-True $result.RemovedAfterVerification 'A copia temporaria deve ser removida depois do sucesso.'
     Assert-True (-not (Test-Path -LiteralPath $result.RestoredPath)) 'Somente a copia temporaria pode ser removida.'
     Assert-True (Test-Path -LiteralPath (Join-Path $snapshot 'manifest.json')) 'O snapshot original deve permanecer intacto.'
