@@ -162,6 +162,25 @@ function Import-PcSetupConfiguration {
     foreach ($key in @('Network','PersistAgentState','Docker','SSH','Display','GPU','X11','HostSharedMemory','TerminalPassthrough','InheritEnvironment','UpdateCheck','Worktree','SystemdUser','Tailscale','Pictures')) {
         Assert-PcSetupTableKey -Table $configuration.Agent.Capabilities -Key $key -Path 'config.Agent.Capabilities'
     }
+    if (-not $configuration.Agent.ContainsKey('ProjectSecrets')) {
+        $configuration.Agent['ProjectSecrets'] = @{
+            DenyPaths = @('.env', '.env.local', '.env.*.local', 'credentials.json', 'secrets/**')
+            DenyPathExceptions = @()
+        }
+    }
+    if (-not ($configuration.Agent.ProjectSecrets -is [hashtable])) { throw 'Agent.ProjectSecrets deve ser uma hashtable.' }
+    foreach ($key in @('DenyPaths','DenyPathExceptions')) {
+        Assert-PcSetupTableKey -Table $configuration.Agent.ProjectSecrets -Key $key -Path 'config.Agent.ProjectSecrets'
+        $seenSecretPaths = @()
+        foreach ($configuredPath in @($configuration.Agent.ProjectSecrets[$key])) {
+            $secretPath = [string]$configuredPath
+            if ([string]::IsNullOrWhiteSpace($secretPath) -or $secretPath -match "[`r`n\\]" -or $secretPath.StartsWith('/') -or $secretPath -match '^[A-Za-z]:' -or $secretPath -match '(^|/)\.\.?(/|$)') {
+                throw "Agent.ProjectSecrets.$key contem um caminho inseguro: $secretPath"
+            }
+            if ($seenSecretPaths -contains $secretPath) { throw "Agent.ProjectSecrets.$key contem um caminho duplicado: $secretPath" }
+            $seenSecretPaths += $secretPath
+        }
+    }
     if (-not ($configuration.Agent.Harness -is [hashtable])) { throw 'Agent.Harness deve ser uma hashtable.' }
     foreach ($key in @('Enabled','PackageManager','Package','Version')) { Assert-PcSetupTableKey -Table $configuration.Agent.Harness -Key $key -Path 'config.Agent.Harness' }
     if ($configuration.Agent.Harness.PackageManager -ne 'Npm') { throw 'Agent.Harness.PackageManager deve ser Npm.' }
@@ -215,6 +234,39 @@ function Import-PcSetupConfiguration {
         if ($defaults.Count -ne 1) { throw "Cada distribuicao WSL por conta deve ter exatamente um ambiente Default. Grupo: $($group.Name)" }
     }
     return $configuration
+}
+
+function Get-PcSetupVirtualizationAssessment {
+    [CmdletBinding()]
+    param(
+        [string[]]$RequestedFeatures = @(),
+        [bool]$FirmwareVirtualization,
+        [bool]$SecondLevelAddressTranslation,
+        [bool]$VmMonitorModeExtensions,
+        [bool]$DataExecutionPrevention
+    )
+
+    $supportedFeatures = @('HyperV','WindowsSandbox','VirtualMachinePlatform','WSL')
+    $requested = @($RequestedFeatures | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+    foreach ($feature in $requested) {
+        if ($feature -notin $supportedFeatures) { throw "Recurso de virtualizacao desconhecido: $feature" }
+    }
+
+    $missing = @()
+    if ($requested.Count -gt 0) {
+        if (-not $FirmwareVirtualization) { $missing += 'virtualizacao de hardware exposta pelo firmware ou hipervisor' }
+        if (-not $SecondLevelAddressTranslation) { $missing += 'SLAT' }
+    }
+    if (@($requested | Where-Object { $_ -in @('HyperV','WindowsSandbox') }).Count -gt 0) {
+        if (-not $VmMonitorModeExtensions) { $missing += 'extensoes de monitor de VM' }
+        if (-not $DataExecutionPrevention) { $missing += 'prevencao de execucao de dados' }
+    }
+
+    return [pscustomobject]@{
+        Ready             = ($missing.Count -eq 0)
+        RequestedFeatures = $requested
+        Missing           = $missing
+    }
 }
 
 function Resolve-PcSetupTemplate {
@@ -675,4 +727,4 @@ function Get-PcSetupProjectFingerprint {
     finally { $sha.Dispose() }
 }
 
-Export-ModuleMember -Function Get-PcSetupExecutionMode, Test-PcSetupAdministrator, Assert-PcSetupAdministrator, Import-PcSetupConfiguration, Resolve-PcSetupTemplate, Get-PcSetupStorageInventory, Resolve-PcSetupStorage, Get-PcSetupConfiguredPaths, Get-PcSetupRuntimePath, Resolve-PcSetupProjectPath, Get-PcSetupAccounts, Get-PcSetupWslEnvironments, Import-PcSetupWslProfile, Get-PcSetupPackageDefinitions, Get-PcSetupPackageIds, Write-PcSetupJson, Assert-PcSetupCompletedApplyReport, Get-PcSetupProjectFingerprint
+Export-ModuleMember -Function Get-PcSetupExecutionMode, Test-PcSetupAdministrator, Assert-PcSetupAdministrator, Import-PcSetupConfiguration, Get-PcSetupVirtualizationAssessment, Resolve-PcSetupTemplate, Get-PcSetupStorageInventory, Resolve-PcSetupStorage, Get-PcSetupConfiguredPaths, Get-PcSetupRuntimePath, Resolve-PcSetupProjectPath, Get-PcSetupAccounts, Get-PcSetupWslEnvironments, Import-PcSetupWslProfile, Get-PcSetupPackageDefinitions, Get-PcSetupPackageIds, Write-PcSetupJson, Assert-PcSetupCompletedApplyReport, Get-PcSetupProjectFingerprint

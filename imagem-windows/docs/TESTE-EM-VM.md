@@ -23,6 +23,8 @@ Set-VMProcessor -VMName 'pc-setup-test' -ExposeVirtualizationExtensions $true
 
 Troque `pc-setup-test` pelo nome real. Essa virtualização aninhada pertence somente ao laboratório.
 
+O plano executa um preflight antes de alterar recursos opcionais. Se as extensões não estiverem expostas, ele interrompe com uma orientação para o host e não inicia a habilitação de Hyper-V, Sandbox ou WSL 2.
+
 Para testar a pergunta sobre um segundo disco, conecte um segundo VHDX à VM e, dentro dela, inicialize-o, crie um volume NTFS e atribua uma letra. Não use dados reais nesse disco. Repita também o teste apenas com o disco do sistema.
 
 ## Roteiro completo

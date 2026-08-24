@@ -19,7 +19,7 @@ Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-
 - cria as contas habilitadas no arquivo de configuração;
 - preserva o usuário diário como administrador até a conta de recuperação ser testada;
 - aplica ACLs isolando dados pessoais e projetos, com backup e rollback;
-- habilita Hyper-V, Windows Sandbox, Virtual Machine Platform e WSL;
+- valida a virtualização antes de habilitar Hyper-V, Windows Sandbox, Virtual Machine Platform e WSL;
 - instala ou atualiza Chrome, Bitwarden, WinRAR, Google Drive, ferramentas de desenvolvimento e launchers de jogos pelo Winget, com escopo explícito por pacote;
 - atualiza o WSL 2 e prepara, na mesma distribuição Ubuntu, os usuários Linux diário e `agent`;
 - resolve a release estável atual do `ai-jail`, exige o digest SHA-256 publicado pelo GitHub, instala/atualiza o Codex e fornece um launcher isolado;

@@ -86,11 +86,15 @@ Agent = @{
         HostSharedMemory  = $false
         TerminalPassthrough = $false
         InheritEnvironment = $false
-        UpdateCheck       = $true
-        Worktree          = $true
+        UpdateCheck       = $false
+        Worktree          = $false
         SystemdUser       = $false
         Tailscale         = $false
         Pictures          = $false
+    }
+    ProjectSecrets = @{
+        DenyPaths = @('.env', '.env.local', '.env.*.local', 'credentials.json', 'secrets/**')
+        DenyPathExceptions = @()
     }
     VirtualMachine = @{
         Enabled = $false
@@ -106,6 +110,8 @@ Agent = @{
 Se `DefaultPath` for preenchido, aponte para um projeto abaixo da raiz, por exemplo `/home/agent/Dev/meu-projeto`, e não para `/home/agent/Dev`.
 
 A autenticação do harness e as credenciais Git não são automatizadas. Elas pertencem ao home do usuário Linux `agent` e devem ser liberadas manualmente. A VM permanece apenas como opção declarada; não há criação automática.
+
+`ProjectSecrets` adiciona regras `--deny-path` em toda abertura do agente. Os caminhos são relativos ao projeto escolhido e não podem apontar para fora dele. Se a seção estiver ausente em um perfil antigo, o carregador aplica em memória a lista segura mostrada acima. Exceções são possíveis em `DenyPathExceptions`, mas devem ser restritas a arquivos comprovadamente não secretos. Uma configuração `.ai-jail` versionada no próprio projeto pode acrescentar proteções específicas.
 
 ## Pacotes
 

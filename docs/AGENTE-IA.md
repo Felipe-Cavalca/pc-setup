@@ -40,15 +40,15 @@ As capacidades são declaradas em `Agent.Capabilities`:
 | `HostSharedMemory` | desabilitada | não compartilha `/dev/shm` com processos do host |
 | `TerminalPassthrough` | desabilitada | mantém a filtragem do terminal |
 | `InheritEnvironment` | desabilitada | não copia indiscriminadamente variáveis e segredos do shell |
-| `Worktree` | habilitada | permite trabalhar em metadados Git validados de worktrees vinculadas |
-| `UpdateCheck` | habilitada | informa no launcher quando existe nova release do `ai-jail`; a instalação ocorre por `ATUALIZAR.cmd` |
+| `Worktree` | desabilitada | só deve ser habilitada quando o projeto usa um Git worktree vinculado |
+| `UpdateCheck` | desabilitada | atualizações permanecem centralizadas no `ATUALIZAR.cmd` |
 | `SystemdUser`, `Tailscale` e `Pictures` | desabilitadas | não expõem serviços, sockets ou imagens do usuário |
 
-O launcher passa opções explícitas ao `ai-jail`, usa home privado, mantém Landlock, seccomp e limites de recursos e impede gravação automática de configuração pelo launcher. O arquivo `.ai-jail` do projeto pode apenas apertar uma política quando não estiver em uma raiz explicitamente confiada pelo usuário.
+O launcher passa opções explícitas ao `ai-jail`, usa home privado, mantém Landlock, seccomp e limites de recursos e impede gravação automática de configuração pelo launcher. Um arquivo `.ai-jail` versionado no projeto deve ser revisado como código, pois pode acrescentar regras e exceções à política.
 
 O caminho escolhido é canonicalizado e tratado como fronteira de confiança. O launcher bloqueia raízes amplas conhecidas, mas não consegue determinar se todo subdiretório representa semanticamente um único projeto. Se o usuário selecionar uma pasta ampla, todo o conteúdo legível nela poderá ser usado pelo agente.
 
-Arquivos sensíveis que estejam dentro do próprio projeto continuam legíveis, pois o projeto é o diretório de trabalho do sandbox. Cada repositório deve usar `.gitignore` e, quando necessário, uma configuração `.ai-jail` com `mask` ou `deny_paths` para `.env`, certificados e credenciais.
+O launcher nega por padrão os caminhos listados em `Agent.ProjectSecrets`, incluindo `.env`, arquivos locais de ambiente, `credentials.json` e `secrets/**`. As regras só alcançam arquivos correspondentes no momento da abertura. Cada repositório ainda deve usar `.gitignore` e pode acrescentar uma configuração `.ai-jail` revisada para certificados, credenciais ou exceções específicas.
 
 ## Git e recuperação
 

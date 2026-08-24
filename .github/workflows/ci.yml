@@ -36,7 +36,9 @@ jobs:
 
       - name: Executar testes
         shell: powershell
-        run: .\tests\run-all.ps1
+        run: |
+          .\tests\run-all.ps1
+          .\tests\security-hardening.tests.ps1
 
   linux:
     name: Scripts WSL

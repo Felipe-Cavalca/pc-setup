@@ -112,11 +112,23 @@
             HostSharedMemory  = $false
             TerminalPassthrough = $false
             InheritEnvironment = $false
-            UpdateCheck       = $true
-            Worktree          = $true
+            UpdateCheck       = $false
+            Worktree          = $false
             SystemdUser       = $false
             Tailscale         = $false
             Pictures          = $false
+        }
+
+        # Regras relativas ao projeto, aplicadas pelo launcher em toda execucao.
+        ProjectSecrets = @{
+            DenyPaths = @(
+                '.env'
+                '.env.local'
+                '.env.*.local'
+                'credentials.json'
+                'secrets/**'
+            )
+            DenyPathExceptions = @()
         }
 
         # Apenas reserva a decisao para uma configuracao futura; nenhuma VM e criada pelo setup.

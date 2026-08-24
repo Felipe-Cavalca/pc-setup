@@ -100,6 +100,14 @@ try {
         if ($capabilities.SystemdUser) { '--systemd-user' } else { '--no-systemd-user' }
         if ($capabilities.Tailscale) { '--tailscale' } else { '--no-tailscale' }
         if ($capabilities.Pictures) { '--pictures' } else { '--no-pictures' }
+    )
+    foreach ($denyPath in @($configuration.Agent.ProjectSecrets.DenyPaths)) {
+        $aiJailArguments += @('--deny-path', [string]$denyPath)
+    }
+    foreach ($exception in @($configuration.Agent.ProjectSecrets.DenyPathExceptions)) {
+        $aiJailArguments += @('--deny-path-except', [string]$exception)
+    }
+    $aiJailArguments += @(
         '--private-home'
         '--landlock'
         '--seccomp'

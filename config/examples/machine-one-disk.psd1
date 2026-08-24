@@ -100,11 +100,21 @@
             HostSharedMemory  = $false
             TerminalPassthrough = $false
             InheritEnvironment = $false
-            UpdateCheck       = $true
-            Worktree          = $true
+            UpdateCheck       = $false
+            Worktree          = $false
             SystemdUser       = $false
             Tailscale         = $false
             Pictures          = $false
+        }
+        ProjectSecrets = @{
+            DenyPaths = @(
+                '.env'
+                '.env.local'
+                '.env.*.local'
+                'credentials.json'
+                'secrets/**'
+            )
+            DenyPathExceptions = @()
         }
         VirtualMachine = @{
             Enabled = $false
