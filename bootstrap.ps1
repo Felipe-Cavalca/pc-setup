@@ -10,8 +10,10 @@ $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $PSScriptRoot 'config\machine.psd1' }
 $coreModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Core.psm1'
 $recoveryModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Recovery.psm1'
+$planSummaryModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.PlanSummary.psm1'
 Import-Module $coreModule -Force
 Import-Module $recoveryModule -Force
+Import-Module $planSummaryModule -Force
 
 $mode = Get-PcSetupExecutionMode -Plan:$Plan -Apply:$Apply
 Assert-PcSetupAdministrator
@@ -111,6 +113,7 @@ if ($mode -eq 'Plan') {
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Diretorios' -RelativeScript 'scripts\20-directories.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Plan = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Usuarios locais' -RelativeScript 'scripts\30-users.ps1' -Arguments $common
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Permissoes NTFS' -RelativeScript 'scripts\40-permissions.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Plan = $true }
+    $baseReport.Steps += Invoke-PcSetupStep -Name 'Integracoes de armazenamento' -RelativeScript 'scripts\45-storage-integrations.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Plan = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Pacotes' -RelativeScript 'scripts\60-packages.ps1' -Arguments $common
     $baseReport.Steps += Invoke-PcSetupStep -Name 'WSL' -RelativeScript 'scripts\70-wsl.ps1' -Arguments $common
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Personalizacao' -RelativeScript 'scripts\80-personalization.ps1' -Arguments $common
@@ -118,6 +121,14 @@ if ($mode -eq 'Plan') {
     $baseReport.Status = 'Planned'
     $baseReport.CompletedAt = (Get-Date).ToString('o')
     $reportPath = Write-RunReport -Report $baseReport
+    $readableReports = @()
+    if ($configuration.PlanSummary.Enabled) {
+        $planOutputDirectory = Resolve-PcSetupTemplate -Value ([string]$configuration.PlanSummary.OutputDirectory) -Configuration $configuration -SystemRoot $systemRoot
+        $planOutputDirectory = [IO.Path]::GetFullPath($planOutputDirectory)
+        $planSummary = Write-PcSetupPlanSummaryFiles -Plan $baseReport -JsonPath $reportPath -OutputDirectory $planOutputDirectory -FileBaseName ([string]$configuration.PlanSummary.FileBaseName) -Formats @($configuration.PlanSummary.Formats)
+        $readableReports = @($planSummary.Files)
+        Write-Host "[PLANO LEGIVEL] $($readableReports -join ', ')" -ForegroundColor Green
+    }
 
     $receipt = @{
         CreatedAt    = (Get-Date).ToString('o')
@@ -126,6 +137,7 @@ if ($mode -eq 'Plan') {
         ProjectSha256 = $projectHash
         DataRoot     = $storage.DataRoot
         ReportPath   = $reportPath
+        ReadableReports = $readableReports
     }
     Write-PcSetupJson -InputObject $receipt -Path $planReceiptPath | Out-Null
     Write-Host "`nPlano concluido sem alterar configuracoes do Windows." -ForegroundColor Green
@@ -214,6 +226,7 @@ try {
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Diretorios' -RelativeScript 'scripts\20-directories.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Apply = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Usuarios locais' -RelativeScript 'scripts\30-users.ps1' -Arguments @{ Config = $configuration._ConfigPath; AccountPasswords = $passwords; Apply = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Permissoes NTFS' -RelativeScript 'scripts\40-permissions.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Apply = $true }
+    $baseReport.Steps += Invoke-PcSetupStep -Name 'Integracoes de armazenamento' -RelativeScript 'scripts\45-storage-integrations.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Apply = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'WSL' -RelativeScript 'scripts\70-wsl.ps1' -Arguments @{ Config = $configuration._ConfigPath; Apply = $true }
     $baseReport.Status = 'Completed'
     $baseReport.CompletedAt = (Get-Date).ToString('o')

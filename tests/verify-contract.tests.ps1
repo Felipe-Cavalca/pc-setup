@@ -22,6 +22,9 @@ Assert-Contains $verify 'controle total explicito e herdavel' 'O verify deve val
 Assert-Contains $verify "Name 'Pacotes Winget'.+fase da conta diaria" 'O verify de maquina deve encaminhar a validacao Winget para a fase correta.'
 Assert-Contains $verify 'Get-PcSetupWslDefaultUser' 'O verify deve conferir o usuario padrao do WSL.'
 Assert-Contains $verify 'HyperVAdministratorAccounts' 'O verify deve conferir quem administra o Hyper-V.'
+Assert-Contains $verify 'Armazenamento Hyper-V' 'O verify deve conferir os destinos configurados no Hyper-V.'
+Assert-Contains $verify 'Test-PcSetupBackupManifest' 'O verify deve validar o snapshot local quando ele existir.'
+Assert-Contains $verify 'Versoes conhecidas' 'O verify da conta diaria deve conferir o snapshot conhecido como bom.'
 Assert-Contains $verify 'Get-PcSetupExpectedWslDefaultUser' 'O verify deve preservar o usuario padrao ao validar Agent.'
 Assert-Contains $verify "Name 'Personalizacao'.+fase da conta diaria" 'O verify de maquina deve encaminhar a personalizacao para a fase correta.'
 Assert-Contains $personalization 'Assert-PcSetupCompletedApplyReport' 'A personalizacao deve exigir o comprovante protegido da mesma aplicacao.'
@@ -31,5 +34,6 @@ Assert-Contains $packages 'Assert-PcSetupCompletedApplyReport' 'A etapa Winget d
 Assert-Contains $packages 'Get-PcSetupWingetInstalledInventory' 'A etapa de usuario deve consultar e validar as versoes atuais do Winget.'
 Assert-Contains $packages 'ConfigSha256.*ProjectSha256' 'O inventario Winget deve ser vinculado a configuracao e ao projeto aplicados.'
 Assert-Contains $packages 'winget-installed-' 'A etapa de pacotes deve arquivar inventarios JSON.'
+Assert-Contains $packages "Versions.Mode -eq 'Locked'" 'A etapa de pacotes deve validar divergencias no modo de versoes fixadas.'
 
 Write-Host 'PASS: contrato ampliado do verificador.' -ForegroundColor Green

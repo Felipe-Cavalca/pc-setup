@@ -13,6 +13,7 @@ $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\
 $startPath = Join-Path $PSScriptRoot 'Start-PcSetup.ps1'
 $wslBootstrapPath = Join-Path $root 'wsl\bootstrap.ps1'
 $wslVerifyPath = Join-Path $root 'wsl\verify.ps1'
+$machineSummaryPath = Join-Path $root 'scripts\New-PcSetupMachineSummary.ps1'
 $operation = if ($LauncherName -eq 'INSTALAR.cmd') { 'Instalacao' } else { 'Atualizacao' }
 
 function Get-CompletedWindowsApplyReport {
@@ -81,6 +82,14 @@ function Get-PcSetupWindowsFailureDiagnostic {
         catch { }
     }
     return $null
+}
+
+function Invoke-PcSetupDesktopMachineSummary {
+    param([Parameter(Mandatory)][hashtable]$Configuration)
+
+    if (-not $Configuration.MachineAudit.Enabled -or -not $Configuration.MachineAudit.GenerateAfterReconciliation) { return }
+    & $windowsPowerShell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $machineSummaryPath -Config $Configuration._ConfigPath | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "A geracao do resumo da maquina falhou com codigo $LASTEXITCODE." }
 }
 
 try {
@@ -185,15 +194,21 @@ try {
     & (Join-Path $root 'scripts\90-user-profile.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $completedApply.Path | Out-Host
 
     if ($environments.Count -eq 0) {
+        $knownGoodVersions = $null
+        if ($configuration.Versions.CaptureKnownGood -and $configuration.Packages.Enabled) {
+            $knownGoodVersions = & (Join-Path $root 'scripts\Save-PcSetupKnownGood.ps1') -Config $configuration._ConfigPath
+        }
         $completedState = [ordered]@{
             SchemaVersion      = 1
             CompletedAt        = (Get-Date).ToString('o')
             ConfigSha256       = $configHash
             ProjectSha256      = $projectHash
             WindowsApplyReport = $completedApply.Path
+            KnownGoodVersions  = if ($knownGoodVersions) { $knownGoodVersions.Path } else { $null }
         }
         Write-PcSetupJson -InputObject $completedState -Path $completedStatePath | Out-Null
         if (Test-Path -LiteralPath $reconcileStatePath -PathType Leaf) { Remove-Item -LiteralPath $reconcileStatePath -Force }
+        Invoke-PcSetupDesktopMachineSummary -Configuration $configuration
         Write-Host '[OK] Nenhum ambiente WSL habilitado para esta conta.' -ForegroundColor Green
         Write-Host "$($operation.ToUpperInvariant()) E VALIDACAO CONCLUIDAS." -ForegroundColor Green
         exit 0
@@ -208,15 +223,22 @@ try {
         if ($wslVerifyExitCode -ne 0) { throw "A verificacao WSL falhou para $($environment.Name) com codigo $wslVerifyExitCode." }
     }
 
+    $knownGoodVersions = $null
+    if ($configuration.Versions.CaptureKnownGood -and $configuration.Packages.Enabled) {
+        $knownGoodVersions = & (Join-Path $root 'scripts\Save-PcSetupKnownGood.ps1') -Config $configuration._ConfigPath
+    }
+
     $completedState = [ordered]@{
         SchemaVersion      = 1
         CompletedAt        = (Get-Date).ToString('o')
         ConfigSha256       = $configHash
         ProjectSha256      = $projectHash
         WindowsApplyReport = $completedApply.Path
+        KnownGoodVersions  = if ($knownGoodVersions) { $knownGoodVersions.Path } else { $null }
     }
     Write-PcSetupJson -InputObject $completedState -Path $completedStatePath | Out-Null
     if (Test-Path -LiteralPath $reconcileStatePath -PathType Leaf) { Remove-Item -LiteralPath $reconcileStatePath -Force }
+    Invoke-PcSetupDesktopMachineSummary -Configuration $configuration
 
     Write-Host ''
     Write-Host "$($operation.ToUpperInvariant()) E VALIDACAO CONCLUIDAS." -ForegroundColor Green

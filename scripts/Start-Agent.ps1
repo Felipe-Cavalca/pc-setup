@@ -3,7 +3,9 @@
 param(
     [string]$Config = '',
     [string]$ProjectPath = '',
-    [string]$Command = ''
+    [string]$Command = '',
+    [ValidateSet('Direct','Managed','Review')]
+    [string]$Mode = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,6 +32,40 @@ function Test-SafeAgentProjectPath {
     return $true
 }
 
+function Select-PcSetupAgentMode {
+    param([Parameter(Mandatory)][hashtable]$AgentConfiguration)
+
+    $defaultMode = [string]$AgentConfiguration.Launcher.DefaultMode
+    if (-not $AgentConfiguration.Launcher.PromptForMode) { return $defaultMode }
+
+    Write-Host 'Modo do agente:' -ForegroundColor Cyan
+    Write-Host "  1. Normal ($defaultMode, recomendado) - projeto gravavel, online e isolado"
+    if ($AgentConfiguration.Launcher.ReviewEnabled) {
+        Write-Host '  2. Revisao - projeto somente leitura; continua online para o Codex'
+    }
+    Write-Host '  3. Direto - compatibilidade com o fluxo anterior, mantendo hooks do ai-memory'
+    $selection = Read-Host 'Escolha 1, 2 ou 3; Enter usa 1'
+    if ([string]::IsNullOrWhiteSpace($selection) -or $selection -eq '1') { return $defaultMode }
+    if ($selection -eq '2' -and $AgentConfiguration.Launcher.ReviewEnabled) { return 'Review' }
+    if ($selection -eq '3') { return 'Direct' }
+    throw 'Modo invalido. Use 1, 2 ou 3.'
+}
+
+function Get-PcSetupSensitiveProjectMatches {
+    param(
+        [Parameter(Mandatory)][string]$Distribution,
+        [Parameter(Mandatory)][string]$LinuxUser,
+        [Parameter(Mandatory)][string]$ProjectPath,
+        [string[]]$Patterns = @()
+    )
+
+    if ($Patterns.Count -eq 0) { return @() }
+    $findScript = 'root="$1"; shift; for pattern in "$@"; do find "$root" -path "$root/.git" -prune -o -path "$root/node_modules" -prune -o -path "$root/vendor" -prune -o -path "$root/$pattern" -print -quit 2>/dev/null; done'
+    $output = @(& wsl.exe --distribution $Distribution --user $LinuxUser --exec bash -c $findScript -- $ProjectPath @Patterns)
+    if ($LASTEXITCODE -ne 0) { throw 'O preflight de segredos nao conseguiu inspecionar o projeto.' }
+    return @($output | ForEach-Object { ([string]$_).Replace([string][char]0, [string]::Empty).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+}
+
 try {
     $configuration = Import-PcSetupConfiguration -Path $Config
     if (-not $configuration.Agent.Enabled) { throw 'O agente esta desabilitado na configuracao.' }
@@ -48,6 +84,9 @@ try {
 
     if ([string]::IsNullOrWhiteSpace($Command)) { $Command = [string]$configuration.Agent.DefaultCommand }
     if ($Command -notmatch '^[A-Za-z0-9._-]+$') { throw 'O comando do agente deve ser somente o nome de um executavel.' }
+    if ([string]::IsNullOrWhiteSpace($Mode)) { $Mode = Select-PcSetupAgentMode -AgentConfiguration $configuration.Agent }
+    if ($Mode -eq 'Review' -and -not $configuration.Agent.Launcher.ReviewEnabled) { throw 'O modo Review esta desabilitado na configuracao.' }
+    if ($Mode -eq 'Managed' -and (-not $configuration.Agent.Memory.Enabled -or [string]$configuration.Agent.Memory.LaunchMode -ne 'Managed')) { throw 'O modo Managed exige Agent.Memory habilitado e configurado para Managed.' }
     if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
         $ProjectPath = [string]$configuration.Agent.Workspace.DefaultPath
     }
@@ -67,33 +106,52 @@ try {
     }
     if ($configuration.Agent.Workspace.Mode -ne 'SelectedProjectOnly') { throw 'Politica de workspace do agente nao suportada.' }
 
-    & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) -- test -d $wslProjectPath
+    & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec test -d $wslProjectPath
     if ($LASTEXITCODE -ne 0) { throw "Diretorio nao encontrado dentro do WSL: $wslProjectPath" }
-    $canonicalOutput = @(& wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) -- readlink --canonicalize-existing -- $wslProjectPath 2>$null)
+    $canonicalOutput = @(& wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec readlink --canonicalize-existing -- $wslProjectPath 2>$null)
     if ($LASTEXITCODE -ne 0 -or $canonicalOutput.Count -eq 0) { throw "Nao foi possivel canonicalizar o workspace: $wslProjectPath" }
-    $wslProjectPath = ([string]$canonicalOutput[-1]).Replace([char]0, '').Trim()
+    $wslProjectPath = ([string]$canonicalOutput[-1]).Replace([string][char]0, [string]::Empty).Trim()
     $configuredRoots = @(
         Get-PcSetupWslEnvironments -Configuration $configuration |
             Where-Object { $_.Enabled -and $_.WindowsAccount -eq $environmentDefinition.WindowsAccount -and $_.Distribution -eq $distribution } |
             ForEach-Object { (Import-PcSetupWslProfile -Configuration $configuration -Environment $_).ProjectRoot }
     )
     if (-not (Test-SafeAgentProjectPath -Path $wslProjectPath -ConfiguredRoots $configuredRoots)) { throw "O launcher recusa uma raiz ampla ou nao canonica como workspace: $wslProjectPath" }
-    & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) -- test -x /usr/local/bin/ai-jail
+    & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec test -x /usr/local/bin/ai-jail
     if ($LASTEXITCODE -ne 0) { throw 'ai-jail ausente. Aplique e valide o ambiente WSL Agent.' }
-    & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) -- bash -lc "command -v -- '$Command' >/dev/null"
+    & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec bash -lc "command -v -- '$Command' >/dev/null"
     if ($LASTEXITCODE -ne 0) { throw "Agente '$Command' nao instalado para o usuario Linux $($profile.LinuxUser)." }
+    if ($Mode -eq 'Managed') {
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec test -x /usr/local/bin/ai-memory
+        if ($LASTEXITCODE -ne 0) { throw 'ai-memory ausente. Execute ATUALIZAR.cmd e tente novamente.' }
+    }
 
-    if ($profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
+    if ([string]$configuration.Agent.ProjectSecrets.PreflightMode -ne 'Off') {
+        $sensitiveMatches = @(Get-PcSetupSensitiveProjectMatches -Distribution $distribution -LinuxUser ([string]$profile.LinuxUser) -ProjectPath $wslProjectPath -Patterns @($configuration.Agent.ProjectSecrets.DenyPaths))
+        if ($sensitiveMatches.Count -gt 0) {
+            $relativeMatches = @($sensitiveMatches | ForEach-Object { $_.Substring($wslProjectPath.TrimEnd('/').Length).TrimStart('/') })
+            Write-Host "[SEGREDOS] $($relativeMatches.Count) caminho(s) protegido(s) encontrado(s): $($relativeMatches -join ', ')" -ForegroundColor Yellow
+            Write-Host 'Eles serao negados pelo ai-jail. Arquivos secretos criados depois da abertura exigem uma nova sessao para receber a regra.' -ForegroundColor Yellow
+            if ([string]$configuration.Agent.ProjectSecrets.PreflightMode -eq 'Stop') { throw 'O preflight encontrou caminhos sensiveis e a politica esta configurada como Stop.' }
+        }
+    }
+
+    $strictLockdown = $Mode -eq 'Review' -or ($configuration.Agent.RestrictedMode.Enabled -and $configuration.Agent.RestrictedMode.Lockdown)
+    if (-not $strictLockdown -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
         $memoryService = 'pc-setup-ai-memory-' + $environmentDefinition.Name.ToLowerInvariant() + '.service'
-        & wsl.exe --distribution $distribution --user root -- systemctl start $memoryService
+        & wsl.exe --distribution $distribution --user root --exec systemctl start $memoryService
         if ($LASTEXITCODE -ne 0) { throw "Nao foi possivel iniciar o servico do ai-memory: $memoryService. Execute ATUALIZAR.cmd e consulte o relatorio WSL." }
         $memoryServerUrl = [string]$profile.AiMemory.ServerUrl
-        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) -- env "AI_MEMORY_SERVER_URL=$memoryServerUrl" bash -c 'set -a; . "$HOME/.config/ai-memory/env"; set +a; /usr/local/bin/ai-memory status --json >/dev/null'
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec env "AI_MEMORY_SERVER_URL=$memoryServerUrl" bash -c 'set -a; . "$HOME/.config/ai-memory/env"; set +a; /usr/local/bin/ai-memory status --json >/dev/null'
         if ($LASTEXITCODE -ne 0) { throw "ai-memory nao respondeu em $memoryServerUrl. Execute ATUALIZAR.cmd e consulte o relatorio WSL." }
     }
 
     $capabilities = $configuration.Agent.Capabilities
-    $aiJailArguments = @(
+    if ($strictLockdown) {
+        $aiJailArguments = @('--lockdown', '--network', '--agent-state', '--no-inherit-env', '--no-save-config', '--no-worktree')
+    }
+    else {
+        $aiJailArguments = @(
         if ($capabilities.Network) { '--network' } else { '--no-network' }
         if ($capabilities.PersistAgentState) { '--agent-state' } else { '--no-agent-state' }
         if ($capabilities.Docker) { '--docker' } else { '--no-docker' }
@@ -109,29 +167,46 @@ try {
         if ($capabilities.SystemdUser) { '--systemd-user' } else { '--no-systemd-user' }
         if ($capabilities.Tailscale) { '--tailscale' } else { '--no-tailscale' }
         if ($capabilities.Pictures) { '--pictures' } else { '--no-pictures' }
-    )
+        )
+        if ($profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
+            $aiJailArguments += @('--rw-map', "/home/$($profile.LinuxUser)/.local/share/ai-memory")
+        }
+        $aiJailArguments += @(
+            '--private-home'
+            '--landlock'
+            '--seccomp'
+            '--rlimits'
+            '--no-save-config'
+            '--no-mise'
+        )
+    }
+
     foreach ($denyPath in @($configuration.Agent.ProjectSecrets.DenyPaths)) {
         $aiJailArguments += @('--deny-path', [string]$denyPath)
     }
     foreach ($exception in @($configuration.Agent.ProjectSecrets.DenyPathExceptions)) {
         $aiJailArguments += @('--deny-path-except', [string]$exception)
     }
-    if ($profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
-        $aiJailArguments += @('--rw-map', "/home/$($profile.LinuxUser)/.local/share/ai-memory")
+    foreach ($environmentVariable in @($configuration.Agent.EnvironmentAllowList)) {
+        $aiJailArguments += @('--env', [string]$environmentVariable)
     }
-    $aiJailArguments += @(
-        '--private-home'
-        '--landlock'
-        '--seccomp'
-        '--rlimits'
-        '--no-save-config'
-        '--no-mise'
-        '--'
-        $Command
-    )
+    if (-not $strictLockdown -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
+        $aiJailArguments += @('--env', 'AI_MEMORY_AUTH_TOKEN', '--env', 'AI_MEMORY_SERVER_URL')
+    }
 
-    Write-Host "[AGENTE] $Command em $wslProjectPath via ai-jail." -ForegroundColor Cyan
-    & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath -- /usr/local/bin/ai-jail @aiJailArguments
+    $sandboxCommand = if ($Mode -eq 'Managed' -and -not $strictLockdown) { @('ai-memory', 'run', $Command) } else { @($Command) }
+    $aiJailArguments += @('--') + $sandboxCommand
+
+    $isolationLabel = if ($strictLockdown) { 'revisao somente leitura; online para autenticacao do Codex' } elseif ($Mode -eq 'Managed') { 'ai-jail restrito com workstream gerenciado pelo ai-memory' } else { 'ai-jail restrito com hooks do ai-memory' }
+    Write-Host "[AGENTE] $Command em $wslProjectPath via $isolationLabel." -ForegroundColor Cyan
+    if (-not $strictLockdown -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
+        $memoryServerUrl = [string]$profile.AiMemory.ServerUrl
+        $launchScript = 'set -a; . "$HOME/.config/ai-memory/env"; set +a; export AI_MEMORY_SERVER_URL="$1"; shift; exec /usr/local/bin/ai-jail "$@"'
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec bash -c $launchScript -- $memoryServerUrl @aiJailArguments
+    }
+    else {
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec /usr/local/bin/ai-jail @aiJailArguments
+    }
     exit $LASTEXITCODE
 }
 catch {

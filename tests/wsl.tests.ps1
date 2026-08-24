@@ -82,6 +82,23 @@ $automaticTarget = Resolve-PcSetupWslTarget -Configuration $configuration -Curre
 Assert-Equal 'DailyUser' $automaticTarget.Environment.Name 'A selecao automatica deve escolher o ambiente WSL padrao.'
 Assert-Equal 'felipe' (Get-PcSetupExpectedWslDefaultUser -Configuration $configuration -Environment $agent) 'Aplicar Agent nao deve trocar o usuario WSL padrao.'
 
+$script:capturedWslArguments = @()
+function global:Invoke-PcSetupFakeWsl {
+    $script:capturedWslArguments = @($args)
+    $global:LASTEXITCODE = 0
+    '/mnt/c/pc-setup-main/wsl/linux/bootstrap.sh'
+}
+try {
+    $windowsScriptPath = 'C:\pc-setup-main\wsl\linux\bootstrap.sh'
+    $convertedScriptPath = ConvertTo-PcSetupWslPath -Distribution 'Ubuntu-24.04' -WindowsPath $windowsScriptPath -WslCommand 'Invoke-PcSetupFakeWsl'
+    Assert-Equal '/mnt/c/pc-setup-main/wsl/linux/bootstrap.sh' $convertedScriptPath 'A conversao deve retornar o caminho informado pelo WSL.'
+    Assert-True (@($script:capturedWslArguments) -contains '--exec') 'A conversao deve ignorar o shell intermediario com wsl --exec.'
+    Assert-Equal $windowsScriptPath $script:capturedWslArguments[-1] 'O caminho Windows deve chegar ao wslpath como um unico argumento literal.'
+}
+finally {
+    Remove-Item -Path Function:\Invoke-PcSetupFakeWsl -ErrorAction SilentlyContinue
+}
+
 $oneDiskConfiguration = Import-PcSetupConfiguration -Path (Join-Path $root 'config\examples\machine-one-disk.psd1')
 $oneDiskEnvironments = @(Get-PcSetupWslEnvironments -Configuration $oneDiskConfiguration)
 Assert-Equal 2 $oneDiskEnvironments.Count 'O exemplo generico deve documentar os dois ambientes configuraveis.'

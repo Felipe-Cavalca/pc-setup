@@ -50,7 +50,7 @@ function Get-PcSetupWslDistributionNames {
 
     $output = @(& $WslCommand --list --quiet 2>$null)
     if ($LASTEXITCODE -ne 0) { throw "wsl --list --quiet falhou com codigo $LASTEXITCODE." }
-    return @($output | ForEach-Object { ([string]$_).Replace([char]0, '').Trim() } | Where-Object { $_ })
+    return @($output | ForEach-Object { ([string]$_).Replace([string][char]0, [string]::Empty).Trim() } | Where-Object { $_ })
 }
 
 function Get-PcSetupWslDistributionVersion {
@@ -64,7 +64,7 @@ function Get-PcSetupWslDistributionVersion {
     if ($LASTEXITCODE -ne 0) { throw "wsl --list --verbose falhou com codigo $LASTEXITCODE." }
     $escaped = [regex]::Escape($Distribution)
     foreach ($line in $output) {
-        $clean = ([string]$line).Replace([char]0, '')
+        $clean = ([string]$line).Replace([string][char]0, [string]::Empty)
         if ($clean -match "^\s*\*?\s*$escaped\s+\S+\s+(\d+)\s*$") { return [int]$Matches[1] }
     }
     return $null
@@ -77,9 +77,9 @@ function Get-PcSetupWslDefaultUser {
         [string]$WslCommand = 'wsl.exe'
     )
 
-    $output = @(& $WslCommand --distribution $Distribution -- id --user --name 2>$null)
+    $output = @(& $WslCommand --distribution $Distribution --exec id --user --name 2>$null)
     if ($LASTEXITCODE -ne 0 -or $output.Count -eq 0) { throw "Nao foi possivel consultar o usuario padrao de $Distribution." }
-    return ([string]$output[-1]).Replace([char]0, '').Trim()
+    return ([string]$output[-1]).Replace([string][char]0, [string]::Empty).Trim()
 }
 
 function ConvertTo-PcSetupWslPath {
@@ -90,9 +90,10 @@ function ConvertTo-PcSetupWslPath {
         [string]$WslCommand = 'wsl.exe'
     )
 
-    $output = @(& $WslCommand --distribution $Distribution --user root -- wslpath -a $WindowsPath 2>$null)
+    # --exec evita que o shell Linux interprete as barras invertidas do caminho Windows.
+    $output = @(& $WslCommand --distribution $Distribution --user root --exec wslpath -a -- $WindowsPath 2>$null)
     if ($LASTEXITCODE -ne 0 -or $output.Count -eq 0) { throw "Nao foi possivel converter o caminho para WSL: $WindowsPath" }
-    return ([string]$output[-1]).Replace([char]0, '').Trim()
+    return ([string]$output[-1]).Replace([string][char]0, [string]::Empty).Trim()
 }
 
 function Invoke-PcSetupWslLinuxScript {
@@ -144,7 +145,7 @@ function Invoke-PcSetupWslLinuxScript {
             '--harness-version', [string]$Profile.Harness.Version
         )
     }
-    $output = @(& $WslCommand --distribution $Distribution --user root -- bash $ScriptPath @arguments 2>&1)
+    $output = @(& $WslCommand --distribution $Distribution --user root --exec bash -- $ScriptPath @arguments 2>&1)
     $exitCode = $LASTEXITCODE
     $output | Out-Host
     return [pscustomobject]@{ ExitCode = $exitCode; Output = @($output | ForEach-Object { [string]$_ }) }
@@ -160,12 +161,12 @@ function Get-PcSetupWslInstalledState {
 
     if ($ProfileName -notmatch '^[A-Za-z][A-Za-z0-9_-]*$') { throw "Nome de perfil WSL invalido: $ProfileName" }
     $manifestPath = "/var/lib/pc-setup/$ProfileName/installed.tsv"
-    $lines = @(& $WslCommand --distribution $Distribution --user root -- cat -- $manifestPath 2>$null)
+    $lines = @(& $WslCommand --distribution $Distribution --user root --exec cat -- $manifestPath 2>$null)
     if ($LASTEXITCODE -ne 0) { throw "Manifesto WSL ausente ou ilegivel: $manifestPath" }
     $metadata = [ordered]@{}
     $packages = @()
     foreach ($rawLine in $lines) {
-        $line = ([string]$rawLine).Replace([char]0, '')
+        $line = ([string]$rawLine).Replace([string][char]0, [string]::Empty)
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         $parts = $line -split "`t", 2
         $key = $parts[0]

@@ -20,6 +20,6 @@ Assert-Contains $packages 'SourceUnavailable[\s\S]+Invoke-OfflineInstaller' 'Fal
 Assert-Contains $packages '-1978335207[\s\S]+RequiresAdministrator' 'O erro que exige administrador deve produzir um diagnostico proprio.'
 Assert-NotContains $packages 'Invoke-WingetElevated|Start-Process.+winget' 'O Winget nao pode ser reiniciado sob outra conta.'
 if (Test-Path -LiteralPath $elevatedHelper) { throw 'O auxiliar elevado mutavel deve ser removido.' }
-Assert-Contains $development '(?m)^Microsoft\.PowerShell\|user\r?$' 'PowerShell deve usar o instalador do perfil diario.'
+Assert-Contains $development '(?m)^Microsoft\.PowerShell\|user\|required\r?$' 'PowerShell deve usar o instalador do perfil diario e permanecer obrigatorio.'
 
 Write-Host 'PASS: fonte, contexto do usuario e fallback do Winget.' -ForegroundColor Green

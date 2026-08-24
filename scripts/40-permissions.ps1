@@ -25,6 +25,9 @@ $targets = @(
     [pscustomobject]@{ Key = 'Development'; Path = $paths.Development; Grants = $developmentGrants },
     [pscustomobject]@{ Key = 'PersonalData'; Path = $paths.PersonalData; Grants = @(@{ Identity = $primaryUser; Rights = 'FullControl' }) }
 )
+if ($configuration.Backup.Enabled) {
+    $targets += [pscustomobject]@{ Key = 'Backups'; Path = $paths[[string]$configuration.Backup.StagingPathKey]; Grants = @(@{ Identity = $primaryUser; Rights = 'FullControl' }) }
+}
 
 foreach ($target in $targets) {
     $grantsText = @($target.Grants | ForEach-Object { "$($_.Identity):$($_.Rights)" }) -join ', '

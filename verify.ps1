@@ -9,8 +9,10 @@ $ErrorActionPreference = 'Continue'
 if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $PSScriptRoot 'config\machine.psd1' }
 $coreModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Core.psm1'
 $wslModule = Join-Path $PSScriptRoot 'wsl\PcSetup.Wsl.psm1'
+$backupModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Backup.psm1'
 Import-Module $coreModule -Force
 Import-Module $wslModule -Force
+Import-Module $backupModule -Force
 $configuration = Import-PcSetupConfiguration -Path $Config
 Assert-PcSetupAdministrator
 $configHash = (Get-FileHash -LiteralPath $configuration._ConfigPath -Algorithm SHA256).Hash
@@ -159,6 +161,9 @@ if ($paths) {
         @{ Key = 'Development'; Grants = $developmentGrants },
         @{ Key = 'PersonalData'; Grants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'FullControl' }) }
     )
+    if ($configuration.Backup.Enabled) {
+        $aclExpectations += @{ Key = [string]$configuration.Backup.StagingPathKey; Grants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'FullControl' }) }
+    }
     foreach ($expectation in $aclExpectations) {
         $path = $paths[$expectation.Key]
         if (-not (Test-Path -LiteralPath $path -PathType Container)) { continue }
@@ -204,6 +209,41 @@ if ($paths) {
             Add-Check -Status $(if ($unexpected.Count -eq 0) { 'PASS' } else { 'FAIL' }) -Name "ACL $($expectation.Key)/identidades" -Detail $(if ($unexpected.Count -eq 0) { 'sem acessos extras' } else { "acessos inesperados: $($unexpected -join ', ')" })
         }
         catch { Add-Check -Status 'FAIL' -Name "ACL $($expectation.Key)" -Detail $_.Exception.Message }
+    }
+
+    foreach ($integrationName in @('HyperV','Docker','Steam','Epic')) {
+        $integration = $configuration.Storage.Integrations[$integrationName]
+        if (-not $integration.Enabled) { continue }
+        $target = [string]$paths[[string]$integration.PathKey]
+        if ($integrationName -eq 'HyperV' -and [string]$integration.Mode -eq 'Automatic') {
+            try {
+                $hostSettings = Get-VMHost -ErrorAction Stop
+                $expectedVhdPath = Join-Path $target 'Virtual Hard Disks'
+                $valid =
+                    [IO.Path]::GetFullPath([string]$hostSettings.VirtualMachinePath).TrimEnd('\') -eq [IO.Path]::GetFullPath($target).TrimEnd('\') -and
+                    [IO.Path]::GetFullPath([string]$hostSettings.VirtualHardDiskPath).TrimEnd('\') -eq [IO.Path]::GetFullPath($expectedVhdPath).TrimEnd('\')
+                Add-Check -Status $(if ($valid) { 'PASS' } else { 'FAIL' }) -Name 'Armazenamento Hyper-V' -Detail "VMs=$($hostSettings.VirtualMachinePath); VHDs=$($hostSettings.VirtualHardDiskPath)"
+            }
+            catch { Add-Check -Status 'FAIL' -Name 'Armazenamento Hyper-V' -Detail $_.Exception.Message }
+        }
+        else {
+            Add-Check -Status 'WARN' -Name "Armazenamento $integrationName" -Detail "pasta pronta em $target; confirmacao manual exigida no aplicativo"
+        }
+    }
+
+    if ($configuration.Backup.Enabled) {
+        $stagingRoot = [string]$paths[[string]$configuration.Backup.StagingPathKey]
+        $snapshot = Get-ChildItem -LiteralPath $stagingRoot -Directory -Filter 'backup-*' -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+        if (-not $snapshot) {
+            Add-Check -Status 'WARN' -Name 'Backup de dados' -Detail "area local pronta em $stagingRoot; nenhum snapshot criado manualmente"
+        }
+        else {
+            try {
+                $backupVerification = Test-PcSetupBackupManifest -SnapshotPath $snapshot.FullName
+                Add-Check -Status 'PASS' -Name 'Backup de dados' -Detail "snapshot local verificado=$($snapshot.FullName); arquivos=$($backupVerification.Files); ainda requer copia externa"
+            }
+            catch { Add-Check -Status 'FAIL' -Name 'Backup de dados' -Detail $_.Exception.Message }
+        }
     }
 }
 
@@ -280,8 +320,36 @@ if ($configuration.Features.WSL) {
     else { Add-Check -Status 'FAIL' -Name 'WSL' -Detail 'wsl.exe ausente' }
 }
 
-if ($configuration.Packages.Enabled) {
-    Add-Check -Status 'INFO' -Name 'Pacotes Winget' -Detail 'instalados, inventariados e validados sem elevacao na fase da conta diaria'
+if ($configuration.Packages.Enabled -and $env:USERNAME -ne [string]$configuration.Accounts.DailyUser.Name) {
+    Add-Check -Status 'INFO' -Name 'Pacotes Winget' -Detail "validacao executada na fase da conta diaria $($configuration.Accounts.DailyUser.Name)"
+}
+elseif ($configuration.Packages.Enabled) {
+    try {
+        $packageDefinitions = @(Get-PcSetupPackageDefinitions -Configuration $configuration)
+        $inventoryPath = Get-PcSetupRuntimePath -Configuration $configuration -Key 'WingetInventoryPath'
+        if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) { throw "Inventario Winget ausente: $inventoryPath" }
+        $inventory = Get-Content -LiteralPath $inventoryPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($inventory.SchemaVersion -ne '1.0') { throw "SchemaVersion do inventario Winget nao suportada: $($inventory.SchemaVersion)" }
+        $information.WingetInventory = $inventoryPath
+        foreach ($definition in $packageDefinitions) {
+            $record = @($inventory.Packages | Where-Object PackageId -eq $definition.PackageId)
+            $found = $record.Count -eq 1 -and $record[0].Found -and -not [string]::IsNullOrWhiteSpace([string]$record[0].Version)
+            $versionMatches = $found -and ([string]$configuration.Versions.Mode -ne 'Locked' -or [string]$record[0].Version -eq [string]$definition.Version)
+            $status = if ($versionMatches) { 'PASS' } elseif ($definition.Required) { 'FAIL' } else { 'WARN' }
+            $detail = if ($versionMatches) { "versao=$($record[0].Version); escopo=$($record[0].Scope); criticidade=$($definition.Criticality)" } elseif ($found) { "versao esperada=$($definition.Version); atual=$($record[0].Version); criticidade=$($definition.Criticality)" } else { "ausente ou sem versao; criticidade=$($definition.Criticality); ATUALIZAR.cmd tentara novamente" }
+            Add-Check -Status $status -Name "Pacote $($definition.PackageId)" -Detail $detail
+        }
+        if ($configuration.Versions.CaptureKnownGood) {
+            $knownGoodPath = Get-PcSetupRuntimePath -Configuration $configuration -Key 'KnownGoodVersionPath'
+            if (Test-Path -LiteralPath $knownGoodPath -PathType Leaf) {
+                $knownGood = Get-Content -LiteralPath $knownGoodPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                Add-Check -Status $(if ($knownGood.Status -eq 'KnownGood') { 'PASS' } else { 'FAIL' }) -Name 'Versoes conhecidas' -Detail $knownGoodPath
+                $information.KnownGoodVersions = $knownGoodPath
+            }
+            else { Add-Check -Status 'WARN' -Name 'Versoes conhecidas' -Detail 'snapshot ainda nao capturado; conclua ATUALIZAR.cmd' }
+        }
+    }
+    catch { Add-Check -Status 'FAIL' -Name 'Pacotes Winget/inventario' -Detail $_.Exception.Message }
 }
 
 if ($configuration.Personalization.Enabled) {

@@ -64,8 +64,10 @@ Assert-Throws -Pattern 'propria raiz' -Message 'Nenhum diretorio configurado pod
 
 $packageConfiguration = Import-PcSetupConfiguration -Path (Join-Path $root 'config\machine.psd1')
 $ids = @(Get-PcSetupPackageIds -Configuration $packageConfiguration)
-Assert-Equal 11 $ids.Count 'Todos os IDs dos tres perfis devem ser carregados sem duplicidade.'
+Assert-Equal 13 $ids.Count 'Todos os IDs dos tres perfis devem ser carregados sem duplicidade.'
 Assert-Equal $true ($ids -contains 'RARLab.WinRAR') 'WinRAR deve estar no perfil base.'
+Assert-Equal $true ($ids -contains 'Brave.Brave') 'Brave deve estar disponivel como pacote opcional.'
+Assert-Equal $true ($ids -contains 'Yubico.Authenticator') 'Yubico Authenticator deve estar disponivel como pacote opcional.'
 $fingerprint = Get-PcSetupProjectFingerprint -Configuration $packageConfiguration
 Assert-Equal 64 $fingerprint.Length 'A impressao do plano deve usar SHA-256.'
 Assert-Throws -Pattern 'sai da raiz' -Message 'Arquivos auxiliares nao podem escapar do projeto.' -Action {

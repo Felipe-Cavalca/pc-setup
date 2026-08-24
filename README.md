@@ -20,11 +20,16 @@ Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-
 - preserva o usuário diário como administrador até a conta de recuperação ser testada;
 - aplica ACLs isolando dados pessoais e projetos, com backup e rollback;
 - valida a virtualização antes de habilitar Hyper-V, Windows Sandbox, Virtual Machine Platform e WSL;
-- instala ou atualiza Chrome, Bitwarden, WinRAR, Google Drive, ferramentas de desenvolvimento e launchers de jogos pelo Winget, com escopo explícito por pacote;
+- instala ou atualiza Chrome, Brave, Yubico Authenticator, Bitwarden, WinRAR, Google Drive, ferramentas de desenvolvimento e launchers de jogos pelo Winget, com escopo e criticidade explícitos por pacote;
 - atualiza o WSL 2 e prepara, na mesma distribuição Ubuntu, os usuários Linux diário e `agent`;
 - resolve as releases estáveis atuais do `ai-jail` e do `ai-memory`, exige os digests SHA-256 publicados pelo GitHub, instala/atualiza o Codex e fornece um launcher isolado com memória local;
 - permite que o usuário diário administre o Hyper-V sem torná-lo administrador geral do Windows;
 - gera relatórios JSON de plano, aplicação, versões instaladas pelo Winget e validação;
+- atualiza na Área de Trabalho uma cópia legível do plano em HTML e Markdown antes de pedir confirmação;
+- registra um snapshot local das versões conhecidas como boas para uma reinstalação reproduzível;
+- prepara backup local verificável, cuja cópia para outro disco é disparada manualmente;
+- permite restaurar integralmente um snapshot em uma pasta temporária, validar os hashes e remover somente essa cópia de teste;
+- gera na Área de Trabalho um resumo informativo em HTML e Markdown com Windows, hardware, virtualização, armazenamento, dispositivos e estado do `pc-setup`;
 - apenas informa o estado do BitLocker, sem configurá-lo.
 
 A conta pública fica habilitada como usuário padrão. A VM opcional e o plano de fundo ficam desabilitados. O debloat é configurado, mas continua sendo uma etapa separada com confirmação própria.
@@ -47,12 +52,14 @@ O arquivo:
 
 1. carrega `config\machine.psd1` e planeja Windows e WSL;
 2. solicita permissão de Administrador;
-3. mostra o plano e o disco escolhido;
+3. mostra o plano e o disco escolhido e atualiza `PLANO-PC-SETUP.html` e `PLANO-PC-SETUP.md` na Área de Trabalho;
 4. pede `S` uma única vez;
 5. aplica e valida as configurações de máquina em processo elevado;
 6. se a conta atual não for a conta diária configurada, pede para entrar nela e executar o mesmo arquivo novamente;
 7. na conta diária, aplica pacotes e personalização no perfil correto, elevando somente instaladores de máquina que precisarem;
-8. aplica e valida os ambientes WSL da conta diária, primeiro o usuário padrão e depois o `agent`.
+8. aplica e valida os ambientes WSL da conta diária, primeiro o usuário padrão e depois o `agent`;
+9. registra as versões realmente validadas de Winget e WSL;
+10. atualiza `RESUMO-DA-MAQUINA.html` e `RESUMO-DA-MAQUINA.md` na Área de Trabalho.
 
 Pacotes com escopo `machine` podem abrir um pedido de UAC durante a fase da conta diária. Isso é esperado: o Winget continua disponível no perfil correto, enquanto somente o instalador que precisa alterar a máquina recebe elevação.
 
@@ -86,7 +93,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\bootstrap.ps1 -Config .\config\machine.psd1 -Plan
 ```
 
-Leia o plano mostrado e o caminho do relatório. Se a escolha do disco, usuários, recursos e programas estiver correta:
+Leia o plano mostrado e o caminho do relatório. O JSON técnico continua em `%ProgramData%\pc-setup\reports`; o perfil padrão também atualiza `PLANO-PC-SETUP.html` e `.md` na Área de Trabalho com a mesma prévia. Se a escolha do disco, usuários, recursos e programas estiver correta:
 
 ```powershell
 .\bootstrap.ps1 -Config .\config\machine.psd1 -Apply
@@ -156,12 +163,14 @@ Data\<usuario principal>
 Shared
 VMs
 Containers
+Backups
 ```
 
 As ACLs protegidas são:
 
 - `Dev`: usuário principal com modificação;
 - dados pessoais: somente usuário principal, SYSTEM e Administradores.
+- `Backups`: somente usuário principal, SYSTEM e Administradores.
 
 O agente não usa uma pasta Windows dedicada. Ele roda como o usuário Linux `agent`, sem `sudo`, dentro do WSL e do `ai-jail`. O workspace Linux compartilhado fica em `/home/agent/Dev`; `felipe` e `agent` pertencem ao grupo `pcsetup-agent`.
 
@@ -173,21 +182,31 @@ Antes da alteração, o script exporta as ACLs para `%ProgramData%\pc-setup\acl-
 
 Perfis do Windows, `AppData`, `ProgramData` e componentes do sistema não são movidos.
 
-A criação dessas pastas não redireciona automaticamente bibliotecas da Steam, dados do Docker ou o destino escolhido pelos instaladores. Esses ajustes continuam específicos de cada programa.
+O Hyper-V recebe automaticamente `VMs` como destino padrão para novas máquinas e `VMs\Virtual Hard Disks` para novos VHDs. Docker Desktop, Steam e Epic exigem confirmação nas respectivas interfaces; o plano, a aplicação e o verificador mostram a pasta e mantêm essa pendência visível. O projeto não altera arquivos internos não documentados desses aplicativos.
 
 ## Programas
 
 Os perfis ficam em [`config/packages`](config/packages):
 
-- `base`: Chrome, Bitwarden, WinRAR e Google Drive;
+- `base`: Chrome, Brave, Yubico Authenticator, Bitwarden, WinRAR e Google Drive;
 - `development`: Git, PowerShell, Windows Terminal, VS Code e Docker Desktop;
 - `gaming`: Steam e Epic Games Launcher.
 
-O Winget consulta a fonte oficial configurada no Windows e tenta instalar a versão atual. Cada linha do perfil declara `ID|escopo`; `Packages.InstallScope` é apenas o padrão para linhas sem escopo. Chrome e os aplicativos tradicionais usam `machine`; Bitwarden, PowerShell e Windows Terminal usam `user`, preservando a instalação no perfil diário quando o pacote oferece esse escopo. Em caso de falha, um instalador offline só é aceito quando consta em [`config/offline-installers.psd1`](config/offline-installers.psd1), declara o mesmo escopo, existe dentro da pasta permitida e tem SHA-256 idêntico ao manifesto.
+O Winget consulta a fonte oficial configurada no Windows. Cada linha usa `ID|escopo|required/optional`. Falha em item `required` interrompe; item `optional` fica pendente para a próxima execução. Chrome, Brave e os aplicativos tradicionais usam `machine`; Bitwarden, PowerShell e Windows Terminal usam `user`. Em caso de falha, um instalador offline só é aceito quando consta em [`config/offline-installers.psd1`](config/offline-installers.psd1), declara o mesmo escopo, existe dentro da pasta permitida e tem SHA-256 idêntico ao manifesto.
 
 O fallback offline pode estar atrás da versão publicada. O inventário registra o que foi realmente instalado e a próxima execução com acesso à internet tenta atualizar novamente.
 
+`Yubico.Authenticator` instala somente o aplicativo. Cadastro da YubiKey, PIN, contas, passkeys e códigos de recuperação permanecem manuais; o projeto não lê nem grava segredos da chave.
+
 Ao final da etapa, as versões realmente encontradas pelo `winget export --include-versions` são registradas em `%LOCALAPPDATA%\pc-setup\winget-installed.json` da conta diária e arquivadas junto aos relatórios da fase do usuário.
+
+O padrão `Versions.Mode = 'Latest'` continua buscando versões atuais. Depois de uma execução completa, `%LOCALAPPDATA%\pc-setup\versions-known-good.json` reúne o inventário Winget e os manifestos WSL validados. `FIXAR-VERSOES.cmd` exporta esse estado para `config\versions.lock.json`; para reproduzi-lo em uma instalação limpa, altere `Versions.Mode` para `Locked`. O modo fixado usa `winget --version` e valida divergências, mas não desinstala nem força downgrade numa máquina já em uso.
+
+## Backup de dados
+
+`BACKUP.cmd` copia `PersonalData` e `Development` para um snapshot datado dentro de `Backups`, sem excluir snapshots anteriores, e cria um manifesto SHA-256. Essa cópia local é uma área de preparação e recuperação rápida, não um backup independente enquanto estiver no mesmo disco dos dados.
+
+Com a unidade externa conectada, `EXPORTAR-BACKUP.cmd` copia o snapshot mais recente para `pc-setup-backups` no destino informado e verifica novamente os hashes. `VERIFICAR-BACKUP.cmd` confere o snapshot local mais recente. `TESTAR-RESTAURACAO.cmd` copia todo o snapshot para a pasta temporária configurada, valida o manifesto e remove somente essa cópia depois do sucesso; o snapshot nunca é apagado. `Backup.ExternalDestination` pode guardar um caminho de disco externo ou de pasta sincronizada; autenticação e credenciais continuam fora do repositório.
 
 Se o Winget não conseguir abrir a fonte padrão ou retornar `0x80070005` ou `0x80072ee7`, siga o procedimento em [Winget sem acesso à fonte padrão](docs/RECUPERACAO.md#winget-sem-acesso-à-fonte-padrão).
 
@@ -197,7 +216,7 @@ O bootstrap principal configura os recursos globais do WSL. Na instalação inic
 
 Os comandos, perfis convergentes e a decisão entre `/mnt/d/Dev` e o filesystem Linux estão em [`wsl/README.md`](wsl/README.md). Os relatórios WSL incluem as versões APT, do harness, do `ai-jail` e do `ai-memory` realmente encontradas no manifesto instalado.
 
-O perfil padrão instala a versão atual do pacote NPM `@openai/codex` para o usuário Linux `agent`. A autenticação é feita manualmente uma vez e permanece no estado explicitamente liberado do agente. O `ai-memory` roda como o mesmo usuário, em serviço local protegido por token, registra MCP e hooks do Codex e usa a raiz Git como identidade padrão do projeto. `AGENTE.cmd` solicita e canonicaliza um diretório, recusa raízes amplas e o usa como fronteira de acesso do `ai-jail`. Consulte o modelo de segurança, a operação da memória e as limitações em [`docs/AGENTE-IA.md`](docs/AGENTE-IA.md).
+O perfil padrão instala a versão atual do pacote NPM `@openai/codex` para o usuário Linux `agent`. A autenticação é feita manualmente uma vez e permanece no estado explicitamente liberado do agente. O `ai-memory` roda como o mesmo usuário, em serviço local protegido por token, registra MCP e hooks do Codex e usa a raiz Git como identidade padrão do projeto. `AGENTE.cmd` solicita o modo e um diretório, usando por padrão `ai-jail ai-memory run codex`; a opção de revisão deixa o projeto somente leitura. Antes de abrir, o preflight informa caminhos sensíveis que serão negados. Consulte o modelo de segurança, a operação da memória e as limitações em [`docs/AGENTE-IA.md`](docs/AGENTE-IA.md).
 
 ## Criar um perfil de máquina
 
@@ -227,6 +246,10 @@ O Windows limita `Checkpoint-Computer` a um ponto por período de 24 horas. Por 
 Executar um script de alteração diretamente com `-Apply` exige um novo ponto. `-Plan`, `verify.ps1`, testes e o lançador da VM não alteram a configuração do Windows e não criam ponto.
 
 Relatórios e estado das operações de máquina ficam em `%ProgramData%\pc-setup`. Inventário Winget, personalização e ambientes WSL ficam em `%LOCALAPPDATA%\pc-setup` da conta diária. Um ponto de restauração protege configurações e arquivos de sistema, mas não substitui backup dos arquivos pessoais.
+
+Cada plano válido mantém o JSON técnico datado e sobrescreve os arquivos legíveis `PLANO-PC-SETUP.html` e `.md` na Área de Trabalho, evitando acúmulo. Ambos indicam que são apenas uma prévia; nenhuma alteração é aplicada até a confirmação. Quando o lançador solicita credenciais de administrador, os arquivos continuam sendo destinados à Área de Trabalho da conta que iniciou o processo.
+
+Depois da reconciliação, o perfil padrão cria `RESUMO-DA-MAQUINA.html` e `.md` na Área de Trabalho. `RESUMO-DA-MAQUINA.cmd` atualiza os dois arquivos sob demanda. O relatório é somente leitura e não atualiza BIOS, firmware, drivers, BitLocker, TPM ou YubiKey. Consulte [`docs/AUDITORIA-DA-MAQUINA.md`](docs/AUDITORIA-DA-MAQUINA.md).
 
 Procedimentos para aplicação incompleta, ACLs, WSL, checkpoints e restauração estão em [`docs/RECUPERACAO.md`](docs/RECUPERACAO.md).
 

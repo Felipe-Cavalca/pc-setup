@@ -40,8 +40,54 @@ function Import-PcSetupConfiguration {
     $resolvedPath = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
     $configuration = Import-PowerShellDataFile -LiteralPath $resolvedPath
     if (-not ($configuration -is [hashtable])) { throw 'O arquivo de configuracao deve retornar uma hashtable.' }
+    $configuration['_ConfigPath'] = $resolvedPath
+    $configuration['_ProjectRoot'] = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
-    foreach ($key in @('SchemaVersion','ProfileName','Execution','Reconciliation','Windows','Machine','Storage','Accounts','Agent','Features','Packages','WSL','Personalization','Debloat','Recovery','Security','Runtime')) {
+    if ($configuration.Packages -is [hashtable] -and -not $configuration.Packages.ContainsKey('DefaultCriticality')) {
+        $configuration.Packages['DefaultCriticality'] = 'optional'
+    }
+    if ($configuration.Runtime -is [hashtable] -and -not $configuration.Runtime.ContainsKey('KnownGoodVersionPath')) {
+        $configuration.Runtime['KnownGoodVersionPath'] = '{LocalAppData}\pc-setup\versions-known-good.json'
+    }
+    if ($configuration.Storage -is [hashtable] -and -not $configuration.Storage.ContainsKey('Integrations')) {
+        $configuration.Storage['Integrations'] = @{
+            HyperV = @{ Enabled = $false; PathKey = 'VirtualMachines'; Mode = 'Automatic' }
+            Docker = @{ Enabled = $false; PathKey = 'Containers'; Mode = 'ManualRequired' }
+            Steam  = @{ Enabled = $false; PathKey = 'Games'; Mode = 'ManualRequired' }
+            Epic   = @{ Enabled = $false; PathKey = 'Games'; Mode = 'ManualRequired' }
+        }
+    }
+    if (-not $configuration.ContainsKey('Backup')) {
+        $configuration['Backup'] = @{
+            Enabled = $false; StagingPathKey = 'Backups'; SourcePathKeys = @(); ExternalDestination = ''
+            VerifyHashes = $true; NoAutomaticDeletion = $true
+        }
+    }
+    if ($configuration.Backup -is [hashtable] -and -not $configuration.Backup.ContainsKey('RestoreTest')) {
+        $configuration.Backup['RestoreTest'] = @{
+            Enabled = $false; Destination = '{LocalAppData}\pc-setup\restore-tests'; KeepRestoredCopy = $false
+        }
+    }
+    if (-not $configuration.ContainsKey('MachineAudit')) {
+        $configuration['MachineAudit'] = @{
+            Enabled = $false; GenerateAfterReconciliation = $false; OutputDirectory = '{Desktop}'
+            FileBaseName = 'RESUMO-DA-MAQUINA'; Formats = @('Html', 'Markdown')
+        }
+    }
+    if (-not $configuration.ContainsKey('PlanSummary')) {
+        $configuration['PlanSummary'] = @{
+            Enabled = $true; OutputDirectory = '{Desktop}'
+            FileBaseName = 'PLANO-PC-SETUP'; Formats = @('Html', 'Markdown')
+        }
+    }
+    if (-not $configuration.ContainsKey('Versions')) {
+        $configuration['Versions'] = @{ Mode = 'Latest'; LockFile = 'config\versions.lock.json'; CaptureKnownGood = $true }
+    }
+    if ($configuration.Agent -is [hashtable] -and -not $configuration.Agent.ContainsKey('RestrictedMode')) {
+        $configuration.Agent['RestrictedMode'] = @{ Enabled = $false; Lockdown = $true }
+    }
+
+    foreach ($key in @('SchemaVersion','ProfileName','Execution','Reconciliation','Windows','Machine','Storage','Backup','MachineAudit','PlanSummary','Accounts','Agent','Features','Packages','WSL','Personalization','Versions','Debloat','Recovery','Security','Runtime')) {
         Assert-PcSetupTableKey -Table $configuration -Key $key -Path 'config'
     }
     if ($configuration.Agent -is [hashtable] -and -not $configuration.Agent.ContainsKey('Memory')) {
@@ -55,7 +101,17 @@ function Import-PcSetupConfiguration {
             Client             = 'codex'
             ProjectStrategy    = 'repo-root'
             ServerUrl          = 'http://127.0.0.1:49374'
+            LaunchMode         = 'Direct'
         }
+    }
+    if ($configuration.Agent.Memory -is [hashtable] -and -not $configuration.Agent.Memory.ContainsKey('LaunchMode')) {
+        $configuration.Agent.Memory['LaunchMode'] = 'Direct'
+    }
+    if ($configuration.Agent -is [hashtable] -and -not $configuration.Agent.ContainsKey('Launcher')) {
+        $configuration.Agent['Launcher'] = @{ DefaultMode = 'Direct'; PromptForMode = $false; ReviewEnabled = $false }
+    }
+    if ($configuration.Agent -is [hashtable] -and -not $configuration.Agent.ContainsKey('EnvironmentAllowList')) {
+        $configuration.Agent['EnvironmentAllowList'] = @()
     }
     $requiredKeys = @{
         Execution      = @('Mode','OnMissingSetting','CollectSecretsBeforeApply','StoreSecretsInRepository')
@@ -63,19 +119,23 @@ function Import-PcSetupConfiguration {
         Windows        = @('Edition','TargetVersion','MinimumBuild')
         Machine        = @('ComputerName','PrimaryUser')
         Features       = @('HyperV','WindowsSandbox','VirtualMachinePlatform','WSL','PublicVirtualMachine')
-        Packages       = @('Enabled','PreferredSource','PreferCurrentVersion','InstallScope','Profiles','AllowOfflineFallback','OfflineInstallerDirectory','OfflineManifest','RetryCount')
+        Packages       = @('Enabled','PreferredSource','PreferCurrentVersion','InstallScope','DefaultCriticality','Profiles','AllowOfflineFallback','OfflineInstallerDirectory','OfflineManifest','RetryCount')
         WSL            = @('Update','DefaultVersion','Distribution','Environments')
         Personalization = @('Enabled','WallpaperPath')
         Debloat        = @('Enabled','Mode','Repository','Release','ArchiveSha256','Preset','Silent','AppRemovalTarget','RemoveGamingApps','RequireSha256','RequireConfirmation')
         Recovery       = @('RequireRestorePointBeforeChanges','Scope','SystemProtectionMustBeEnabled','EnableSystemProtectionAutomatically','FailIfRestorePointUnavailable','AllowExistingRestorePointReuse','AllowSameApplySessionReuse','ProtectDirectScriptExecution','UserPhaseReceiptMaxAgeHours')
         Security       = @('DailyUserMustBeStandard','BackupAclBeforeChanges','ManageBitLocker','BitLockerMode','ReportBitLockerStatus','RequireRecoveryKeyCheck','DemoteDailyUserAutomatically','HyperVAdministratorAccounts')
-        Runtime        = @('StateDirectory','ReportDirectory','UserStateDirectory','UserReportDirectory','WingetInventoryPath','StopOnError','RequirePlanBeforeApply')
-        Agent          = @('Enabled','Environment','DefaultCommand','Isolation','Harness','Memory','Workspace','Capabilities','VirtualMachine')
+        Runtime        = @('StateDirectory','ReportDirectory','UserStateDirectory','UserReportDirectory','WingetInventoryPath','KnownGoodVersionPath','StopOnError','RequirePlanBeforeApply')
+        Agent          = @('Enabled','Environment','DefaultCommand','Isolation','Harness','Memory','Launcher','Workspace','Capabilities','EnvironmentAllowList','VirtualMachine','RestrictedMode')
+        Backup         = @('Enabled','StagingPathKey','SourcePathKeys','ExternalDestination','VerifyHashes','NoAutomaticDeletion','RestoreTest')
+        MachineAudit   = @('Enabled','GenerateAfterReconciliation','OutputDirectory','FileBaseName','Formats')
+        PlanSummary    = @('Enabled','OutputDirectory','FileBaseName','Formats')
+        Versions       = @('Mode','LockFile','CaptureKnownGood')
     }
     foreach ($section in $requiredKeys.Keys) {
         foreach ($key in $requiredKeys[$section]) { Assert-PcSetupTableKey -Table $configuration[$section] -Key $key -Path "config.$section" }
     }
-    foreach ($key in @('System','Data','Paths')) { Assert-PcSetupTableKey -Table $configuration.Storage -Key $key -Path 'config.Storage' }
+    foreach ($key in @('System','Data','Paths','Integrations')) { Assert-PcSetupTableKey -Table $configuration.Storage -Key $key -Path 'config.Storage' }
     foreach ($key in @('Selection','RequireHealthy')) { Assert-PcSetupTableKey -Table $configuration.Storage.System -Key $key -Path 'config.Storage.System' }
     foreach ($key in @('Mode','SecondaryDiskPolicy','OnMultipleCandidates','AllowRemovableVolumes','RequireHealthy')) { Assert-PcSetupTableKey -Table $configuration.Storage.Data -Key $key -Path 'config.Storage.Data' }
 
@@ -133,9 +193,64 @@ function Import-PcSetupConfiguration {
     }
     if ($configuration.Packages.PreferredSource -ne 'winget' -or -not $configuration.Packages.PreferCurrentVersion) { throw 'Pacotes devem usar Winget e preferir a versao atual.' }
     if ($configuration.Packages.InstallScope -notin @('machine','user')) { throw 'Packages.InstallScope deve ser machine ou user.' }
+    if ($configuration.Packages.DefaultCriticality -notin @('required','optional')) { throw 'Packages.DefaultCriticality deve ser required ou optional.' }
     if ([int]$configuration.Packages.RetryCount -lt 0 -or [int]$configuration.Packages.RetryCount -gt 5) { throw 'Packages.RetryCount deve ficar entre 0 e 5.' }
     if ([string]::IsNullOrWhiteSpace([string]$configuration.Packages.OfflineManifest)) { throw 'Packages.OfflineManifest nao pode ficar vazio.' }
     if (-not $configuration.Runtime.StopOnError -or -not $configuration.Runtime.RequirePlanBeforeApply) { throw 'Runtime deve interromper em erro e exigir plano antes da aplicacao.' }
+    foreach ($integrationName in @('HyperV','Docker','Steam','Epic')) {
+        Assert-PcSetupTableKey -Table $configuration.Storage.Integrations -Key $integrationName -Path 'config.Storage.Integrations'
+        $integration = $configuration.Storage.Integrations[$integrationName]
+        if (-not ($integration -is [hashtable])) { throw "Storage.Integrations.$integrationName deve ser uma hashtable." }
+        foreach ($key in @('Enabled','PathKey','Mode')) { Assert-PcSetupTableKey -Table $integration -Key $key -Path "config.Storage.Integrations.$integrationName" }
+        if ($integration.Enabled -and -not $configuration.Storage.Paths.ContainsKey([string]$integration.PathKey)) { throw "Storage.Integrations.$integrationName.PathKey nao existe em Storage.Paths." }
+        $allowedModes = if ($integrationName -eq 'HyperV') { @('Automatic','ManualRequired') } else { @('ManualRequired') }
+        if ([string]$integration.Mode -notin $allowedModes) { throw "Storage.Integrations.$integrationName.Mode invalido." }
+    }
+    if ($configuration.Storage.Integrations.HyperV.Enabled -and -not $configuration.Features.HyperV) { throw 'A integracao de armazenamento do Hyper-V exige Features.HyperV.' }
+    if ($configuration.Backup.Enabled -and ([string]$configuration.Backup.StagingPathKey -eq '' -or -not $configuration.Storage.Paths.ContainsKey([string]$configuration.Backup.StagingPathKey))) {
+        throw 'Backup.StagingPathKey deve apontar para uma entrada de Storage.Paths.'
+    }
+    $backupSources = @()
+    foreach ($sourceKey in @($configuration.Backup.SourcePathKeys)) {
+        $key = [string]$sourceKey
+        if ($configuration.Backup.Enabled -and -not $configuration.Storage.Paths.ContainsKey($key)) { throw "Backup.SourcePathKeys referencia uma entrada inexistente: $key" }
+        if ($key -eq [string]$configuration.Backup.StagingPathKey) { throw 'A pasta de staging nao pode ser uma origem do proprio backup.' }
+        if ($backupSources -contains $key) { throw "Backup.SourcePathKeys contem item duplicado: $key" }
+        $backupSources += $key
+    }
+    if ($configuration.Backup.Enabled -and $backupSources.Count -eq 0) { throw 'Backup habilitado exige ao menos uma origem.' }
+    if ($configuration.Backup.Enabled -and $configuration.Backup.VerifyHashes -ne $true) { throw 'O backup habilitado deve verificar hashes.' }
+    if ($configuration.Backup.NoAutomaticDeletion -ne $true) { throw 'Backup.NoAutomaticDeletion deve permanecer true.' }
+    if ([string]$configuration.Backup.ExternalDestination -match "[`r`n]") { throw 'Backup.ExternalDestination nao pode conter quebra de linha.' }
+    if (-not ($configuration.Backup.RestoreTest -is [hashtable])) { throw 'Backup.RestoreTest deve ser uma hashtable.' }
+    foreach ($key in @('Enabled','Destination','KeepRestoredCopy')) { Assert-PcSetupTableKey -Table $configuration.Backup.RestoreTest -Key $key -Path 'config.Backup.RestoreTest' }
+    if ($configuration.Backup.RestoreTest.Enabled -and [string]::IsNullOrWhiteSpace([string]$configuration.Backup.RestoreTest.Destination)) { throw 'Backup.RestoreTest.Destination nao pode ficar vazio.' }
+    if ([string]$configuration.Backup.RestoreTest.Destination -match "[`r`n]") { throw 'Backup.RestoreTest.Destination nao pode conter quebra de linha.' }
+    if (-not ($configuration.Backup.RestoreTest.KeepRestoredCopy -is [bool])) { throw 'Backup.RestoreTest.KeepRestoredCopy deve ser booleano.' }
+    foreach ($key in @('Enabled','GenerateAfterReconciliation')) {
+        if (-not ($configuration.MachineAudit[$key] -is [bool])) { throw "MachineAudit.$key deve ser booleano." }
+    }
+    if ($configuration.MachineAudit.GenerateAfterReconciliation -and -not $configuration.MachineAudit.Enabled) { throw 'MachineAudit.GenerateAfterReconciliation exige MachineAudit.Enabled.' }
+    if ([string]::IsNullOrWhiteSpace([string]$configuration.MachineAudit.OutputDirectory) -or [string]$configuration.MachineAudit.OutputDirectory -match "[`r`n]") { throw 'MachineAudit.OutputDirectory invalido.' }
+    if ([string]$configuration.MachineAudit.FileBaseName -notmatch '^[A-Za-z0-9._-]+$') { throw 'MachineAudit.FileBaseName deve usar apenas letras, numeros, ponto, hifen ou sublinhado.' }
+    $auditFormats = @($configuration.MachineAudit.Formats | ForEach-Object { [string]$_ })
+    if ($auditFormats.Count -eq 0 -or @($auditFormats | Where-Object { $_ -notin @('Html','Markdown') }).Count -gt 0) { throw 'MachineAudit.Formats aceita apenas Html e Markdown.' }
+    $configuration.MachineAudit.Formats = @($auditFormats | Select-Object -Unique)
+    if (-not ($configuration.PlanSummary.Enabled -is [bool])) { throw 'PlanSummary.Enabled deve ser booleano.' }
+    if ([string]::IsNullOrWhiteSpace([string]$configuration.PlanSummary.OutputDirectory) -or [string]$configuration.PlanSummary.OutputDirectory -match "[`r`n]") { throw 'PlanSummary.OutputDirectory invalido.' }
+    if ([string]$configuration.PlanSummary.FileBaseName -notmatch '^[A-Za-z0-9._-]+$') { throw 'PlanSummary.FileBaseName deve usar apenas letras, numeros, ponto, hifen ou sublinhado.' }
+    $planFormats = @($configuration.PlanSummary.Formats | ForEach-Object { [string]$_ })
+    if ($planFormats.Count -eq 0 -or @($planFormats | Where-Object { $_ -notin @('Html','Markdown') }).Count -gt 0) { throw 'PlanSummary.Formats aceita apenas Html e Markdown.' }
+    $configuration.PlanSummary.Formats = @($planFormats | Select-Object -Unique)
+    if ([string]$configuration.Versions.Mode -notin @('Latest','Locked')) { throw 'Versions.Mode deve ser Latest ou Locked.' }
+    if ([string]::IsNullOrWhiteSpace([string]$configuration.Versions.LockFile)) { throw 'Versions.LockFile nao pode ficar vazio.' }
+    $null = Resolve-PcSetupProjectPath -Configuration $configuration -Value ([string]$configuration.Versions.LockFile) -SettingName 'Versions.LockFile'
+    if (-not ($configuration.Agent.RestrictedMode.Enabled -is [bool]) -or -not ($configuration.Agent.RestrictedMode.Lockdown -is [bool])) { throw 'Agent.RestrictedMode deve usar valores booleanos.' }
+    if ($configuration.Agent.RestrictedMode.Enabled) {
+        foreach ($capability in @('Docker','SSH','Display','GPU','X11','HostSharedMemory','TerminalPassthrough','InheritEnvironment','Worktree','SystemdUser','Tailscale','Pictures')) {
+            if ($configuration.Agent.Capabilities[$capability]) { throw "O modo restrito exige Agent.Capabilities.$capability desabilitada." }
+        }
+    }
     if ($configuration.Debloat.Mode -ne 'ReviewThenApply' -or -not $configuration.Debloat.RequireConfirmation) { throw 'Debloat deve permanecer em modo ReviewThenApply com confirmacao.' }
     if ($configuration.Debloat.Preset -ne 'RunDefaults') { throw 'Debloat.Preset deve ser RunDefaults.' }
     if (-not ($configuration.Debloat.Silent -is [bool]) -or $configuration.Debloat.Silent -ne $true) { throw 'Debloat.Silent deve ser true para a execucao reproduzivel.' }
@@ -179,7 +294,11 @@ function Import-PcSetupConfiguration {
         $configuration.Agent['ProjectSecrets'] = @{
             DenyPaths = @('.env', '.env.local', '.env.*.local', 'credentials.json', 'secrets/**')
             DenyPathExceptions = @()
+            PreflightMode = 'Warn'
         }
+    }
+    if ($configuration.Agent.ProjectSecrets -is [hashtable] -and -not $configuration.Agent.ProjectSecrets.ContainsKey('PreflightMode')) {
+        $configuration.Agent.ProjectSecrets['PreflightMode'] = 'Warn'
     }
     if (-not ($configuration.Agent.ProjectSecrets -is [hashtable])) { throw 'Agent.ProjectSecrets deve ser uma hashtable.' }
     foreach ($key in @('DenyPaths','DenyPathExceptions')) {
@@ -194,6 +313,7 @@ function Import-PcSetupConfiguration {
             $seenSecretPaths += $secretPath
         }
     }
+    if ([string]$configuration.Agent.ProjectSecrets.PreflightMode -notin @('Off','Warn','Stop')) { throw 'Agent.ProjectSecrets.PreflightMode deve ser Off, Warn ou Stop.' }
     if (-not ($configuration.Agent.Harness -is [hashtable])) { throw 'Agent.Harness deve ser uma hashtable.' }
     foreach ($key in @('Enabled','PackageManager','Package','Version')) { Assert-PcSetupTableKey -Table $configuration.Agent.Harness -Key $key -Path 'config.Agent.Harness' }
     if ($configuration.Agent.Harness.PackageManager -ne 'Npm') { throw 'Agent.Harness.PackageManager deve ser Npm.' }
@@ -201,7 +321,7 @@ function Import-PcSetupConfiguration {
     if ([string]$configuration.Agent.Harness.Version -ne 'latest' -and [string]$configuration.Agent.Harness.Version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw 'Agent.Harness.Version deve ser latest ou uma versao exata.' }
     if ($configuration.Agent.Enabled -and -not $configuration.Agent.Harness.Enabled) { throw 'O perfil padrao do agente exige Agent.Harness.Enabled.' }
     if (-not ($configuration.Agent.Memory -is [hashtable])) { throw 'Agent.Memory deve ser uma hashtable.' }
-    foreach ($key in @('Enabled','Repository','Version','Architecture','Sha256','RequireAssetDigest','Client','ProjectStrategy','ServerUrl')) { Assert-PcSetupTableKey -Table $configuration.Agent.Memory -Key $key -Path 'config.Agent.Memory' }
+    foreach ($key in @('Enabled','Repository','Version','Architecture','Sha256','RequireAssetDigest','Client','ProjectStrategy','ServerUrl','LaunchMode')) { Assert-PcSetupTableKey -Table $configuration.Agent.Memory -Key $key -Path 'config.Agent.Memory' }
     if ($configuration.Agent.Memory.Enabled) {
         if (-not $configuration.Agent.Enabled) { throw 'Agent.Memory exige Agent.Enabled.' }
         if ([string]$configuration.Agent.Memory.Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Agent.Memory.Repository invalido.' }
@@ -212,9 +332,23 @@ function Import-PcSetupConfiguration {
         if ($configuration.Agent.Memory.RequireAssetDigest -ne $true) { throw 'Agent.Memory.RequireAssetDigest deve permanecer true.' }
         if ([string]$configuration.Agent.Memory.Client -notmatch '^[a-z0-9][a-z0-9-]*$') { throw 'Agent.Memory.Client invalido.' }
         if ([string]$configuration.Agent.Memory.ProjectStrategy -notin @('repo-root','basename')) { throw 'Agent.Memory.ProjectStrategy deve ser repo-root ou basename.' }
+        if ([string]$configuration.Agent.Memory.LaunchMode -notin @('Direct','Managed')) { throw 'Agent.Memory.LaunchMode deve ser Direct ou Managed.' }
         $serverUrlMatch = [regex]::Match([string]$configuration.Agent.Memory.ServerUrl, '^http://127\.0\.0\.1:([1-9][0-9]{0,4})$')
         if (-not $serverUrlMatch.Success -or [int]$serverUrlMatch.Groups[1].Value -gt 65535) { throw 'Agent.Memory.ServerUrl deve usar loopback HTTP e uma porta valida.' }
     }
+    if (-not ($configuration.Agent.Launcher -is [hashtable])) { throw 'Agent.Launcher deve ser uma hashtable.' }
+    foreach ($key in @('DefaultMode','PromptForMode','ReviewEnabled')) { Assert-PcSetupTableKey -Table $configuration.Agent.Launcher -Key $key -Path 'config.Agent.Launcher' }
+    if ([string]$configuration.Agent.Launcher.DefaultMode -notin @('Direct','Managed')) { throw 'Agent.Launcher.DefaultMode deve ser Direct ou Managed.' }
+    if (-not ($configuration.Agent.Launcher.PromptForMode -is [bool]) -or -not ($configuration.Agent.Launcher.ReviewEnabled -is [bool])) { throw 'Agent.Launcher deve usar valores booleanos.' }
+    if ([string]$configuration.Agent.Launcher.DefaultMode -eq 'Managed' -and (-not $configuration.Agent.Memory.Enabled -or [string]$configuration.Agent.Memory.LaunchMode -ne 'Managed')) { throw 'Agent.Launcher.DefaultMode Managed exige Agent.Memory habilitado com LaunchMode Managed.' }
+    $environmentAllowList = @()
+    foreach ($environmentVariable in @($configuration.Agent.EnvironmentAllowList)) {
+        $name = [string]$environmentVariable
+        if ($name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { throw "Agent.EnvironmentAllowList contem nome invalido: $name" }
+        if ($environmentAllowList -contains $name) { throw "Agent.EnvironmentAllowList contem item duplicado: $name" }
+        $environmentAllowList += $name
+    }
+    $configuration.Agent.EnvironmentAllowList = $environmentAllowList
     if (-not ($configuration.Agent.Workspace -is [hashtable])) { throw 'Agent.Workspace deve ser uma hashtable.' }
     foreach ($key in @('Mode','DefaultPath')) { Assert-PcSetupTableKey -Table $configuration.Agent.Workspace -Key $key -Path 'config.Agent.Workspace' }
     if ($configuration.Agent.Workspace.Mode -ne 'SelectedProjectOnly') { throw 'Agent.Workspace.Mode deve ser SelectedProjectOnly.' }
@@ -250,8 +384,6 @@ function Import-PcSetupConfiguration {
         throw 'Debloat habilitado exige ArchiveSha256 valido.'
     }
 
-    $configuration['_ConfigPath'] = $resolvedPath
-    $configuration['_ProjectRoot'] = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     $wslEnvironments = @(Get-PcSetupWslEnvironments -Configuration $configuration)
     foreach ($environment in $wslEnvironments) {
         $profile = Import-PcSetupWslProfile -Configuration $configuration -Environment $environment
@@ -312,11 +444,19 @@ function Resolve-PcSetupTemplate {
     if ([string]::IsNullOrWhiteSpace($programData)) { $programData = Join-Path $SystemRoot 'ProgramData' }
     $localAppData = $env:LOCALAPPDATA
     if ([string]::IsNullOrWhiteSpace($localAppData)) { $localAppData = Join-Path $SystemRoot 'Users\Default\AppData\Local' }
+    $desktop = $env:PC_SETUP_CALLER_DESKTOP
+    if ([string]::IsNullOrWhiteSpace($desktop)) { $desktop = [Environment]::GetFolderPath('Desktop') }
+    if ([string]::IsNullOrWhiteSpace($desktop)) {
+        $userProfile = $env:USERPROFILE
+        if ([string]::IsNullOrWhiteSpace($userProfile)) { $userProfile = Join-Path $SystemRoot 'Users\Default' }
+        $desktop = Join-Path $userProfile 'Desktop'
+    }
 
     return $Value.
         Replace('{SystemRoot}', $SystemRoot.TrimEnd('\')).
         Replace('{ProgramData}', $programData.TrimEnd('\')).
         Replace('{LocalAppData}', $localAppData.TrimEnd('\')).
+        Replace('{Desktop}', $desktop.TrimEnd('\')).
         Replace('{PrimaryUser}', [string]$Configuration.Machine.PrimaryUser)
 }
 
@@ -678,24 +818,52 @@ function Get-PcSetupPackageDefinitions {
 
     $result = @()
     $seen = @()
+    $versionLock = Get-PcSetupVersionLock -Configuration $Configuration
     foreach ($profile in @($Configuration.Packages.Profiles)) {
         $path = Join-Path $Configuration._ProjectRoot "config\packages\$profile.txt"
         if (-not (Test-Path -LiteralPath $path)) { throw "Perfil de pacotes nao encontrado: $path" }
         foreach ($line in @(Get-Content -LiteralPath $path)) {
             $entry = $line.Trim()
             if (-not $entry -or $entry.StartsWith('#')) { continue }
-            $parts = $entry -split '\|', 2
+            $parts = $entry -split '\|', 3
             $id = $parts[0].Trim()
-            $scope = if ($parts.Count -eq 2) { $parts[1].Trim().ToLowerInvariant() } else { [string]$Configuration.Packages.InstallScope }
+            $scope = if ($parts.Count -ge 2 -and -not [string]::IsNullOrWhiteSpace($parts[1])) { $parts[1].Trim().ToLowerInvariant() } else { [string]$Configuration.Packages.InstallScope }
+            $criticality = if ($parts.Count -eq 3 -and -not [string]::IsNullOrWhiteSpace($parts[2])) { $parts[2].Trim().ToLowerInvariant() } else { [string]$Configuration.Packages.DefaultCriticality }
             if ($id -notmatch '^[A-Za-z0-9._-]+$') { throw "ID winget invalido em ${path}: $id" }
             if ($scope -notin @('machine','user')) { throw "Escopo winget invalido em ${path}: $scope" }
+            if ($criticality -notin @('required','optional')) { throw "Criticidade winget invalida em ${path}: $criticality" }
             if ($seen -notcontains $id) {
-                $result += [pscustomobject]@{ PackageId = $id; Scope = $scope; Profile = [string]$profile }
+                $lockedVersion = $null
+                if ($versionLock) {
+                    $lockedPackage = @($versionLock.Packages | Where-Object PackageId -eq $id)
+                    if ($lockedPackage.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$lockedPackage[0].Version)) { throw "Versions.LockFile nao possui uma versao unica para $id." }
+                    $lockedVersion = [string]$lockedPackage[0].Version
+                }
+                $result += [pscustomobject]@{ PackageId = $id; Scope = $scope; Criticality = $criticality; Required = $criticality -eq 'required'; Profile = [string]$profile; Version = $lockedVersion }
                 $seen += $id
             }
         }
     }
     return $result
+}
+
+function Get-PcSetupVersionLock {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][hashtable]$Configuration)
+
+    if ([string]$Configuration.Versions.Mode -eq 'Latest') { return $null }
+    $path = Resolve-PcSetupProjectPath -Configuration $Configuration -Value ([string]$Configuration.Versions.LockFile) -SettingName 'Versions.LockFile'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Arquivo de versoes fixadas ausente: $path" }
+    try { $lock = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json }
+    catch { throw "Arquivo de versoes fixadas invalido: $($_.Exception.Message)" }
+    if ([string]$lock.SchemaVersion -ne '1.0') { throw 'SchemaVersion do arquivo de versoes fixadas nao suportada.' }
+    $seen = @()
+    foreach ($package in @($lock.Packages)) {
+        if ([string]$package.PackageId -notmatch '^[A-Za-z0-9._-]+$' -or [string]::IsNullOrWhiteSpace([string]$package.Version)) { throw 'Arquivo de versoes fixadas contem pacote invalido.' }
+        if ($seen -contains [string]$package.PackageId) { throw "Arquivo de versoes fixadas contem pacote duplicado: $($package.PackageId)" }
+        $seen += [string]$package.PackageId
+    }
+    return $lock
 }
 
 function Get-PcSetupPackageIds {
@@ -760,6 +928,9 @@ function Get-PcSetupProjectFingerprint {
     foreach ($profile in @($Configuration.Packages.Profiles)) {
         $files += Join-Path $Configuration._ProjectRoot "config\packages\$profile.txt"
     }
+    if ([string]$Configuration.Versions.Mode -eq 'Locked') {
+        $files += Resolve-PcSetupProjectPath -Configuration $Configuration -Value ([string]$Configuration.Versions.LockFile) -SettingName 'Versions.LockFile'
+    }
 
     $records = foreach ($file in @($files | Sort-Object -Unique)) {
         $resolved = (Resolve-Path -LiteralPath $file -ErrorAction Stop).Path
@@ -771,4 +942,4 @@ function Get-PcSetupProjectFingerprint {
     finally { $sha.Dispose() }
 }
 
-Export-ModuleMember -Function Get-PcSetupExecutionMode, Test-PcSetupAdministrator, Assert-PcSetupAdministrator, Import-PcSetupConfiguration, Get-PcSetupVirtualizationAssessment, Resolve-PcSetupTemplate, Get-PcSetupStorageInventory, Resolve-PcSetupStorage, Get-PcSetupConfiguredPaths, Get-PcSetupRuntimePath, Resolve-PcSetupProjectPath, Get-PcSetupAccounts, Get-PcSetupWslEnvironments, Import-PcSetupWslProfile, Get-PcSetupPackageDefinitions, Get-PcSetupPackageIds, Write-PcSetupJson, Assert-PcSetupCompletedApplyReport, Get-PcSetupProjectFingerprint
+Export-ModuleMember -Function Get-PcSetupExecutionMode, Test-PcSetupAdministrator, Assert-PcSetupAdministrator, Import-PcSetupConfiguration, Get-PcSetupVirtualizationAssessment, Resolve-PcSetupTemplate, Get-PcSetupStorageInventory, Resolve-PcSetupStorage, Get-PcSetupConfiguredPaths, Get-PcSetupRuntimePath, Resolve-PcSetupProjectPath, Get-PcSetupAccounts, Get-PcSetupWslEnvironments, Import-PcSetupWslProfile, Get-PcSetupPackageDefinitions, Get-PcSetupPackageIds, Get-PcSetupVersionLock, Write-PcSetupJson, Assert-PcSetupCompletedApplyReport, Get-PcSetupProjectFingerprint

@@ -10,7 +10,8 @@ usuário Windows diário
     ├── usuário Linux diário
     └── usuário Linux agent, sem sudo
         ├── ai-jail
-        │   └── projeto escolhido
+        │   └── ai-memory run
+        │       └── Codex no projeto escolhido
         └── ai-memory em 127.0.0.1
             └── estado local do agente
 ```
@@ -21,7 +22,7 @@ O usuário diário pode chamar o agente e acessar `/home/agent/Dev`. Somente ess
 
 O projeto selecionado em `AGENTE.cmd` é a unidade de permissão. O `ai-jail` recebe esse diretório, não a raiz de `D:\Dev`, `/mnt/d` ou um home inteiro. `Agent.Workspace.DefaultPath` pode preencher a escolha, mas não amplia o acesso.
 
-O `ai-memory` roda fora do sandbox, como serviço Linux do usuário `agent`, mas não recebe o projeto como diretório de trabalho nem privilégios administrativos. Ele escuta somente no loopback, exige token e grava apenas em `~/.local/share/ai-memory`. O launcher libera esse diretório em escrita dentro do `ai-jail` para logs e fila durável dos hooks.
+O servidor do `ai-memory` roda fora do sandbox, como serviço Linux do usuário `agent`, mas não recebe privilégios administrativos. Ele escuta somente no loopback, exige token e grava apenas em `~/.local/share/ai-memory`. No modo padrão, o cliente `ai-memory run` e o Codex ficam dentro do mesmo `ai-jail`; o diretório local da memória recebe escrita explícita para logs, fila durável dos hooks e continuidade do workstream.
 
 ## Harness e credenciais
 
@@ -54,15 +55,27 @@ As capacidades são declaradas em `Agent.Capabilities`:
 
 O launcher passa opções explícitas ao `ai-jail`, usa home privado, mantém Landlock, seccomp e limites de recursos e impede gravação automática de configuração pelo launcher. Além do projeto e do estado do harness, somente o diretório de dados do `ai-memory` recebe escrita explícita. Um arquivo `.ai-jail` versionado no projeto deve ser revisado como código, pois pode acrescentar regras e exceções à política.
 
+## Modos apresentados pelo launcher
+
+`AGENTE.cmd` mostra as opções na hora; não é necessário memorizar parâmetros:
+
+1. **Normal**: padrão recomendado, com projeto gravável e `ai-jail ai-memory run codex` para manter um workstream gerenciado.
+2. **Revisão**: usa `--lockdown`, deixando o projeto somente leitura. Rede e estado de login continuam habilitados porque o Codex é remoto; por isso, esse modo reduz escrita acidental, mas não torna conteúdo hostil seguro.
+3. **Direto**: compatibilidade com o fluxo anterior, executando o Codex diretamente no `ai-jail`; MCP e hooks do ai-memory continuam instalados.
+
+`Agent.RestrictedMode.Lockdown = $true` força o comportamento de revisão independentemente da escolha. Para malware, instaladores desconhecidos ou repositórios deliberadamente hostis, use uma VM descartável sem credenciais compartilhadas.
+
 O caminho escolhido é canonicalizado e tratado como fronteira de confiança. O launcher bloqueia raízes amplas conhecidas, mas não consegue determinar se todo subdiretório representa semanticamente um único projeto. Se o usuário selecionar uma pasta ampla, todo o conteúdo legível nela poderá ser usado pelo agente.
 
-O launcher nega por padrão os caminhos listados em `Agent.ProjectSecrets`, incluindo `.env`, arquivos locais de ambiente, `credentials.json` e `secrets/**`. As regras só alcançam arquivos correspondentes no momento da abertura. Cada repositório ainda deve usar `.gitignore` e pode acrescentar uma configuração `.ai-jail` revisada para certificados, credenciais ou exceções específicas.
+O launcher nega por padrão os caminhos listados em `Agent.ProjectSecrets`, incluindo `.env`, arquivos locais de ambiente, `credentials.json` e `secrets/**`. Antes da abertura, o preflight lista apenas os caminhos correspondentes, nunca o conteúdo. As regras só alcançam arquivos existentes no momento da abertura; depois de criar um novo segredo, encerre e abra outra sessão. Cada repositório ainda deve usar `.gitignore` e pode acrescentar uma configuração `.ai-jail` revisada para certificados, credenciais ou exceções específicas.
+
+`Agent.EnvironmentAllowList` pode repassar nomes específicos com `--env NOME`. Os valores vêm do ambiente local, não entram no arquivo de configuração e nunca justificam habilitar `InheritEnvironment`.
 
 O conteúdo registrado pela memória também precisa ser tratado como dado sensível e potencialmente incorreto. Um segredo colado no prompt ou devolvido por uma ferramenta pode chegar aos eventos mesmo que seu arquivo esteja bloqueado. Memória histórica ajuda a retomar contexto, mas código, testes e documentação revisada continuam sendo a fonte de verdade.
 
 ## Operação da memória
 
-O setup inicia e valida o serviço automaticamente. Dentro do ambiente `agent`, os comandos úteis são:
+O setup inicia e valida o serviço automaticamente. O fluxo normal usa `ai-memory run codex`, que mantém a continuidade gerenciada do checkout. Dentro do ambiente `agent`, os comandos úteis são:
 
 ```bash
 ai-memory status --json
@@ -83,6 +96,8 @@ O bootstrap real não faz parte de `INSTALAR.cmd` nem de `ATUALIZAR.cmd`: ele po
 ## Git e recuperação
 
 O agente pode modificar o projeto selecionado. Use commits pequenos, revise `git status`, `git diff` e `git diff --cached`, e mantenha cópia remota ou backup. Sandbox não substitui versionamento nem backup.
+
+Configurações pessoais adicionais não são provisionadas por padrão. VS Code Settings Sync continua responsável por extensões; login Git é manual; Terminal e PowerShell permanecem com seus padrões. Os perfis WSL versionam apenas o necessário para reprodução: usuário, pacotes APT, diretórios, permissões, harness e isolamento. Aliases, temas e dotfiles podem ser acrescentados depois em outro mecanismo, sem duplicar o sync existente.
 
 Push, SSH e Docker permanecem fora do fluxo padrão. Eles só devem ser habilitados quando o projeto exigir e depois de compreender o alcance da permissão.
 
