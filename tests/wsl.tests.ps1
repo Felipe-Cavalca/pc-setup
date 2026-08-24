@@ -19,8 +19,34 @@ Assert-True (-not $configuration.Accounts.ContainsKey('God')) 'God nao deve exis
 Assert-Equal 'AiJail' $configuration.Agent.Isolation 'O agente deve usar ai-jail.'
 Assert-Equal '@openai/codex' $configuration.Agent.Harness.Package 'Codex deve ser o harness padrao.'
 Assert-Equal 'latest' $configuration.Agent.Harness.Version 'O atualizador deve buscar a versao atual do Codex.'
+Assert-Equal $true $configuration.Agent.Memory.Enabled 'A memoria persistente deve estar habilitada no perfil padrao.'
+Assert-Equal 'akitaonrails/ai-memory' $configuration.Agent.Memory.Repository 'A origem do ai-memory deve ser explicita.'
+Assert-Equal 'latest' $configuration.Agent.Memory.Version 'O atualizador deve buscar a release estavel atual do ai-memory.'
+Assert-Equal $true $configuration.Agent.Memory.RequireAssetDigest 'A release do ai-memory deve exigir o digest publicado.'
+Assert-Equal 'codex' $configuration.Agent.Memory.Client 'Codex deve ser o cliente de memoria padrao.'
+Assert-Equal 'repo-root' $configuration.Agent.Memory.ProjectStrategy 'A memoria deve agrupar subdiretorios pela raiz Git.'
+Assert-Equal 'http://127.0.0.1:49374' $configuration.Agent.Memory.ServerUrl 'O servidor de memoria deve ficar no loopback.'
 Assert-Equal 'SelectedProjectOnly' $configuration.Agent.Workspace.Mode 'Somente o projeto selecionado deve ser liberado.'
 Assert-Equal $false $configuration.Agent.VirtualMachine.Enabled 'Nenhuma VM do agente deve ser criada por padrao.'
+
+$invalidConfigPath = Join-Path ([IO.Path]::GetTempPath()) ("pc-setup-invalid-memory-$([guid]::NewGuid().ToString('N')).psd1")
+try {
+    $invalidConfig = (Get-Content -LiteralPath $configPath -Raw).Replace("ServerUrl          = 'http://127.0.0.1:49374'", "ServerUrl          = 'http://0.0.0.0:49374'")
+    [IO.File]::WriteAllText($invalidConfigPath, $invalidConfig, (New-Object Text.UTF8Encoding($false)))
+    $unsafeServerRejected = $false
+    try { Import-PcSetupConfiguration -Path $invalidConfigPath | Out-Null }
+    catch { $unsafeServerRejected = $_.Exception.Message -match 'loopback HTTP' }
+    Assert-True $unsafeServerRejected 'A configuracao deve rejeitar exposicao de ai-memory fora do loopback.'
+
+    $legacyConfig = (Get-Content -LiteralPath $configPath -Raw) -replace '(?ms)\r?\n        Memory = @\{.*?\r?\n        \}\r?\n\r?\n        Workspace', "`r`n`r`n        Workspace"
+    Assert-True ($legacyConfig -notmatch '(?m)^\s*Memory = @\{') 'O teste deve remover a secao Memory do perfil legado.'
+    [IO.File]::WriteAllText($invalidConfigPath, $legacyConfig, (New-Object Text.UTF8Encoding($false)))
+    $importedLegacyConfig = Import-PcSetupConfiguration -Path $invalidConfigPath
+    Assert-Equal $false $importedLegacyConfig.Agent.Memory.Enabled 'Perfis antigos devem receber memoria desabilitada sem quebrar a importacao.'
+}
+finally {
+    if (Test-Path -LiteralPath $invalidConfigPath) { Remove-Item -LiteralPath $invalidConfigPath -Force }
+}
 
 $daily = $environments | Where-Object Name -eq 'DailyUser'
 $agent = $environments | Where-Object Name -eq 'Agent'
@@ -44,6 +70,10 @@ Assert-Equal 'latest' $agentProfile.AiJail.Version 'O perfil deve buscar a relea
 Assert-Equal 'akitaonrails/ai-jail' $agentProfile.AiJail.Repository 'A origem do ai-jail deve ser explicita.'
 Assert-True ([string]::IsNullOrWhiteSpace([string]$agentProfile.AiJail.Sha256)) 'A politica latest nao deve conservar o hash de uma release antiga.'
 Assert-Equal $true $agentProfile.AiJail.RequireAssetDigest 'A release atual deve exigir o digest publicado pelo GitHub.'
+Assert-Equal 'latest' $agentProfile.AiMemory.Version 'O perfil resolvido deve receber a politica do ai-memory.'
+Assert-Equal 'akitaonrails/ai-memory' $agentProfile.AiMemory.Repository 'A origem do ai-memory deve chegar ao perfil WSL.'
+Assert-Equal 'codex' $agentProfile.AiMemory.Client 'A integracao de memoria deve acompanhar o harness padrao.'
+Assert-True (@($agentProfile.Packages) -contains 'curl' -and @($agentProfile.Packages) -contains 'ca-certificates') 'O perfil Agent deve instalar dependencias da release e dos hooks.'
 Assert-True (@($agentProfile.Packages) -contains 'nodejs' -and @($agentProfile.Packages) -contains 'npm') 'O perfil Agent deve instalar o runtime do harness.'
 Assert-Equal '@openai/codex' $agentProfile.Harness.Package 'O perfil resolvido deve receber o harness configurado.'
 Assert-Equal 'codex' $agentProfile.Harness.Command 'O comando do harness deve acompanhar Agent.DefaultCommand.'
@@ -56,6 +86,7 @@ $oneDiskConfiguration = Import-PcSetupConfiguration -Path (Join-Path $root 'conf
 $oneDiskEnvironments = @(Get-PcSetupWslEnvironments -Configuration $oneDiskConfiguration)
 Assert-Equal 2 $oneDiskEnvironments.Count 'O exemplo generico deve documentar os dois ambientes configuraveis.'
 Assert-True (@($oneDiskEnvironments | Where-Object Enabled).Count -eq 0) 'O WSL deve acompanhar o recurso global desabilitado no exemplo minimo.'
+Assert-Equal $false $oneDiskConfiguration.Agent.Memory.Enabled 'O exemplo minimo deve manter a memoria desabilitada junto do agente.'
 
 $dailyPlan = & (Join-Path $root 'wsl\bootstrap.ps1') -Config $configPath -Environment DailyUser -Plan
 $agentPlan = & (Join-Path $root 'wsl\bootstrap.ps1') -Config $configPath -Environment Agent -Plan
@@ -73,6 +104,8 @@ Assert-True ($bootstrapLinux -match 'installed\.tsv' -and $bootstrapLinux -match
 Assert-True ($bootstrapLinux -match 'canonicalize-missing') 'O bootstrap Linux deve recusar uma raiz de projetos desviada por symlink.'
 Assert-True ($bootstrapLinux -match 'passwd --lock' -and $bootstrapLinux -match 'sudo wheel docker lxd' -and $verifyLinux -match 'Agent privilege') 'O bootstrap e o verify devem impedir senha e grupos privilegiados no usuario agent.'
 Assert-True ($releaseHelper -match '/releases/latest' -and $releaseHelper -match '\.digest' -and $bootstrapLinux -match 'sha256sum --check' -and $verifyLinux -match 'ai_jail_binary_sha256') 'A instalacao e a verificacao devem resolver e validar a release atual do ai-jail.'
+Assert-True ($bootstrapLinux -match 'ai-memory-linux-' -and $bootstrapLinux -match 'ai-memory install-mcp' -and $bootstrapLinux -match 'ai-memory install-hooks' -and $bootstrapLinux -match 'pc-setup-ai-memory-' -and $verifyLinux -match 'ai_memory_binary_sha256' -and $verifyLinux -match 'ai-memory health') 'O bootstrap e o verify devem instalar, integrar e validar o ai-memory.'
+Assert-True ($bootstrapLinux -match 'AI_MEMORY_AUTH_TOKEN' -and $bootstrapLinux -match 'chmod 0600' -and $verifyLinux -match 'config_mode == 600') 'O token e a configuracao local do ai-memory devem permanecer protegidos.'
 Assert-True ($bootstrapLinux -match 'npm install --global' -and $bootstrapLinux -match 'harness_version' -and $verifyLinux -match 'Agent harness') 'O bootstrap deve instalar o harness e o verify deve conferir sua versao real.'
 
 $wslModule = Get-Content -LiteralPath (Join-Path $root 'wsl\PcSetup.Wsl.psm1') -Raw
@@ -80,5 +113,6 @@ Assert-True ($wslModule -match 'Get-PcSetupWslInstalledState' -and $bootstrapPow
 
 $agentLauncher = Get-Content -LiteralPath (Join-Path $root 'scripts\Start-Agent.ps1') -Raw
 Assert-True ($agentLauncher -match '--agent-state' -and $agentLauncher -match '--no-docker' -and $agentLauncher -match '--no-inherit-env' -and $agentLauncher -match 'canonicalize-existing' -and $agentLauncher -match 'Test-SafeAgentProjectPath') 'O launcher deve aplicar capacidades explicitas e recusar workspaces amplos ou nao canonicos.'
+Assert-True ($agentLauncher -match 'systemctl start' -and $agentLauncher -match 'ai-memory status' -and $agentLauncher -match '--rw-map' -and $agentLauncher -match '\.local/share/ai-memory') 'O launcher deve iniciar a memoria, validar sua saude e persistir somente o diretorio necessario.'
 
-Write-Host 'PASS: WSL convergente com usuario agent e ai-jail atual validado.' -ForegroundColor Green
+Write-Host 'PASS: WSL convergente com usuario agent, ai-jail e ai-memory atuais validados.' -ForegroundColor Green

@@ -22,7 +22,7 @@ Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-
 - valida a virtualização antes de habilitar Hyper-V, Windows Sandbox, Virtual Machine Platform e WSL;
 - instala ou atualiza Chrome, Bitwarden, WinRAR, Google Drive, ferramentas de desenvolvimento e launchers de jogos pelo Winget, com escopo explícito por pacote;
 - atualiza o WSL 2 e prepara, na mesma distribuição Ubuntu, os usuários Linux diário e `agent`;
-- resolve a release estável atual do `ai-jail`, exige o digest SHA-256 publicado pelo GitHub, instala/atualiza o Codex e fornece um launcher isolado;
+- resolve as releases estáveis atuais do `ai-jail` e do `ai-memory`, exige os digests SHA-256 publicados pelo GitHub, instala/atualiza o Codex e fornece um launcher isolado com memória local;
 - permite que o usuário diário administre o Hyper-V sem torná-lo administrador geral do Windows;
 - gera relatórios JSON de plano, aplicação, versões instaladas pelo Winget e validação;
 - apenas informa o estado do BitLocker, sem configurá-lo.
@@ -67,7 +67,7 @@ Depois de alterar `config/machine.psd1`, os perfis ou os scripts, dê duplo cliq
 3. interrompe e pede reinício quando um recurso do Windows exigir;
 4. reaplica e valida primeiro o usuário Linux padrão e depois o `agent`.
 
-Esse fluxo atualiza pacotes com política de versão atual, incluindo Winget, APT, `Agent.Harness.Version = 'latest'` e `AiJail.Version = 'latest'`. Ele não atualiza o próprio repositório por Git e não cria, lê nem copia credenciais.
+Esse fluxo atualiza pacotes com política de versão atual, incluindo Winget, APT, `Agent.Harness.Version = 'latest'`, `Agent.Memory.Version = 'latest'` e `AiJail.Version = 'latest'`. Ele não atualiza o próprio repositório por Git e não envia credenciais ao repositório.
 
 `INSTALAR.cmd` e `ATUALIZAR.cmd` usam o mesmo orquestrador. O primeiro comunica a instalação inicial; o segundo comunica a reconciliação de uma máquina já configurada. Depois que uma execução termina por completo, `ATUALIZAR.cmd` volta a conferir e reaplicar normalmente o estado desejado.
 
@@ -154,7 +154,6 @@ Games
 Dev
 Data\<usuario principal>
 Shared
-Downloads
 VMs
 Containers
 ```
@@ -165,6 +164,8 @@ As ACLs protegidas são:
 - dados pessoais: somente usuário principal, SYSTEM e Administradores.
 
 O agente não usa uma pasta Windows dedicada. Ele roda como o usuário Linux `agent`, sem `sudo`, dentro do WSL e do `ai-jail`. O workspace Linux compartilhado fica em `/home/agent/Dev`; `felipe` e `agent` pertencem ao grupo `pcsetup-agent`.
+
+Quando a raiz de dados escolhida for `D:\`, a pasta Windows `D:\Dev` aparece no WSL como `/mnt/d/Dev`. Use-a para projetos manipulados principalmente por programas Windows. Para Git, dependências, builds e containers executados principalmente no Linux, prefira `/home/felipe/Dev` ou `/home/agent/Dev`, que oferecem melhor desempenho no WSL. Em uma máquina de um disco, o caminho Windows configurado passa a ser `C:\Dados\Dev`, acessível como `/mnt/c/Dados/Dev`.
 
 Os nomes das contas são configuráveis. Consulte os papéis e limites de cada conta em [`usuarios/README.md`](usuarios/README.md).
 
@@ -188,15 +189,15 @@ O fallback offline pode estar atrás da versão publicada. O inventário registr
 
 Ao final da etapa, as versões realmente encontradas pelo `winget export --include-versions` são registradas em `%LOCALAPPDATA%\pc-setup\winget-installed.json` da conta diária e arquivadas junto aos relatórios da fase do usuário.
 
-Se o Winget não conseguir abrir a fonte padrão ou retornar `0x80070005`, siga o procedimento em [Winget sem acesso à fonte padrão](docs/RECUPERACAO.md#winget-sem-acesso-à-fonte-padrão).
+Se o Winget não conseguir abrir a fonte padrão ou retornar `0x80070005` ou `0x80072ee7`, siga o procedimento em [Winget sem acesso à fonte padrão](docs/RECUPERACAO.md#winget-sem-acesso-à-fonte-padrão).
 
 ## WSL e agente de IA
 
 O bootstrap principal configura os recursos globais do WSL. Na instalação inicial, `INSTALAR.cmd` aplica dois perfis na mesma distribuição: primeiro `DailyUser`, depois `Agent`. Em manutenções posteriores, `ATUALIZAR.cmd` reconcilia os mesmos perfis. Ambos devem ser executados na conta Windows diária, e o perfil do agente não troca o usuário padrão da distribuição.
 
-Os comandos, perfis convergentes e a decisão entre `/mnt/d/Dev` e o filesystem Linux estão em [`wsl/README.md`](wsl/README.md). Os relatórios WSL incluem as versões APT, do harness e do `ai-jail` realmente encontradas no manifesto instalado.
+Os comandos, perfis convergentes e a decisão entre `/mnt/d/Dev` e o filesystem Linux estão em [`wsl/README.md`](wsl/README.md). Os relatórios WSL incluem as versões APT, do harness, do `ai-jail` e do `ai-memory` realmente encontradas no manifesto instalado.
 
-O perfil padrão instala a versão atual do pacote NPM `@openai/codex` para o usuário Linux `agent`. A autenticação é feita manualmente uma vez e permanece no estado explicitamente liberado do agente. `AGENTE.cmd` solicita e canonicaliza um diretório, recusa raízes amplas e o usa como fronteira de acesso do `ai-jail`. Consulte o modelo de segurança e as limitações em [`docs/AGENTE-IA.md`](docs/AGENTE-IA.md).
+O perfil padrão instala a versão atual do pacote NPM `@openai/codex` para o usuário Linux `agent`. A autenticação é feita manualmente uma vez e permanece no estado explicitamente liberado do agente. O `ai-memory` roda como o mesmo usuário, em serviço local protegido por token, registra MCP e hooks do Codex e usa a raiz Git como identidade padrão do projeto. `AGENTE.cmd` solicita e canonicaliza um diretório, recusa raízes amplas e o usa como fronteira de acesso do `ai-jail`. Consulte o modelo de segurança, a operação da memória e as limitações em [`docs/AGENTE-IA.md`](docs/AGENTE-IA.md).
 
 ## Criar um perfil de máquina
 
@@ -204,7 +205,7 @@ Use `config/machine.psd1` como referência e altere, principalmente:
 
 - `Machine.PrimaryUser`;
 - nomes, funções e `Enabled` das contas Windows;
-- harness, workspace, capacidades e ambiente WSL do agente;
+- harness, memória, workspace, capacidades e ambiente WSL do agente;
 - política do segundo disco;
 - recursos opcionais;
 - perfis de programas;
@@ -263,4 +264,5 @@ Consulte também [`SECURITY.md`](SECURITY.md) para o modelo de suporte e reporte
 - [Windows 11 release information](https://learn.microsoft.com/windows/release-health/windows11-release-information)
 - [Arquivos entre Windows e WSL](https://learn.microsoft.com/windows/wsl/filesystems)
 - [Winget export](https://learn.microsoft.com/windows/package-manager/winget/export)
+- [ai-memory](https://github.com/akitaonrails/ai-memory)
 - [Win11Debloat](https://github.com/Raphire/Win11Debloat)

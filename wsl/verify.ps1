@@ -47,6 +47,7 @@ $report = [ordered]@{
     ProjectRoot    = $profile.ProjectRoot
     Packages       = @($profile.Packages)
     AiJail         = if ($profile.ContainsKey('AiJail')) { $profile.AiJail } else { $null }
+    AiMemory       = if ($profile.ContainsKey('AiMemory')) { $profile.AiMemory } else { $null }
     Harness        = if ($profile.ContainsKey('Harness')) { $profile.Harness } else { $null }
     InstalledState = $installedState
     Status         = $status

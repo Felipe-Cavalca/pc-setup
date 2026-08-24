@@ -27,4 +27,4 @@ O perfil `Publico` não encerra a sessão nem apaga automaticamente os dados dos
 
 Depois que a associação ao grupo for aplicada, encerre e abra novamente a sessão do usuário diário para que o novo token de acesso seja usado.
 
-Senhas, tokens e sessões de agentes não devem ser armazenados no Git. A persistência de autenticação do agente é liberada explicitamente pelo launcher e permanece no perfil Linux `agent`.
+Senhas, tokens e sessões de agentes não devem ser armazenados no Git. A persistência de autenticação do agente é liberada explicitamente pelo launcher e permanece no perfil Linux `agent`. O mesmo vale para o token e os dados do `ai-memory`, mantidos no home de `agent` com permissões restritas.

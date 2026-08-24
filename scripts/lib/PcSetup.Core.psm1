@@ -44,6 +44,19 @@ function Import-PcSetupConfiguration {
     foreach ($key in @('SchemaVersion','ProfileName','Execution','Reconciliation','Windows','Machine','Storage','Accounts','Agent','Features','Packages','WSL','Personalization','Debloat','Recovery','Security','Runtime')) {
         Assert-PcSetupTableKey -Table $configuration -Key $key -Path 'config'
     }
+    if ($configuration.Agent -is [hashtable] -and -not $configuration.Agent.ContainsKey('Memory')) {
+        $configuration.Agent['Memory'] = @{
+            Enabled            = $false
+            Repository         = 'akitaonrails/ai-memory'
+            Version            = 'latest'
+            Architecture       = 'x86_64'
+            Sha256             = ''
+            RequireAssetDigest = $true
+            Client             = 'codex'
+            ProjectStrategy    = 'repo-root'
+            ServerUrl          = 'http://127.0.0.1:49374'
+        }
+    }
     $requiredKeys = @{
         Execution      = @('Mode','OnMissingSetting','CollectSecretsBeforeApply','StoreSecretsInRepository')
         Reconciliation = @('Mode','DisableUnrequestedFeatures','RemoveDisabledAccounts','RemoveUnlistedPackages','RemoveUnlistedDirectories')
@@ -57,7 +70,7 @@ function Import-PcSetupConfiguration {
         Recovery       = @('RequireRestorePointBeforeChanges','Scope','SystemProtectionMustBeEnabled','EnableSystemProtectionAutomatically','FailIfRestorePointUnavailable','AllowExistingRestorePointReuse','AllowSameApplySessionReuse','ProtectDirectScriptExecution','UserPhaseReceiptMaxAgeHours')
         Security       = @('DailyUserMustBeStandard','BackupAclBeforeChanges','ManageBitLocker','BitLockerMode','ReportBitLockerStatus','RequireRecoveryKeyCheck','DemoteDailyUserAutomatically','HyperVAdministratorAccounts')
         Runtime        = @('StateDirectory','ReportDirectory','UserStateDirectory','UserReportDirectory','WingetInventoryPath','StopOnError','RequirePlanBeforeApply')
-        Agent          = @('Enabled','Environment','DefaultCommand','Isolation','Harness','Workspace','Capabilities','VirtualMachine')
+        Agent          = @('Enabled','Environment','DefaultCommand','Isolation','Harness','Memory','Workspace','Capabilities','VirtualMachine')
     }
     foreach ($section in $requiredKeys.Keys) {
         foreach ($key in $requiredKeys[$section]) { Assert-PcSetupTableKey -Table $configuration[$section] -Key $key -Path "config.$section" }
@@ -187,6 +200,21 @@ function Import-PcSetupConfiguration {
     if ([string]$configuration.Agent.Harness.Package -notmatch '^@[a-z0-9._-]+/[a-z0-9._-]+$') { throw 'Agent.Harness.Package deve ser um pacote NPM com escopo.' }
     if ([string]$configuration.Agent.Harness.Version -ne 'latest' -and [string]$configuration.Agent.Harness.Version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw 'Agent.Harness.Version deve ser latest ou uma versao exata.' }
     if ($configuration.Agent.Enabled -and -not $configuration.Agent.Harness.Enabled) { throw 'O perfil padrao do agente exige Agent.Harness.Enabled.' }
+    if (-not ($configuration.Agent.Memory -is [hashtable])) { throw 'Agent.Memory deve ser uma hashtable.' }
+    foreach ($key in @('Enabled','Repository','Version','Architecture','Sha256','RequireAssetDigest','Client','ProjectStrategy','ServerUrl')) { Assert-PcSetupTableKey -Table $configuration.Agent.Memory -Key $key -Path 'config.Agent.Memory' }
+    if ($configuration.Agent.Memory.Enabled) {
+        if (-not $configuration.Agent.Enabled) { throw 'Agent.Memory exige Agent.Enabled.' }
+        if ([string]$configuration.Agent.Memory.Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Agent.Memory.Repository invalido.' }
+        if ([string]$configuration.Agent.Memory.Version -ne 'latest' -and [string]$configuration.Agent.Memory.Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Agent.Memory.Version deve ser latest ou uma versao exata.' }
+        if ([string]$configuration.Agent.Memory.Architecture -notmatch '^[a-z0-9_]+$') { throw 'Agent.Memory.Architecture invalida.' }
+        if ([string]$configuration.Agent.Memory.Version -ne 'latest' -and [string]$configuration.Agent.Memory.Sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'Agent.Memory com versao exata exige SHA-256.' }
+        if ([string]$configuration.Agent.Memory.Version -eq 'latest' -and -not [string]::IsNullOrWhiteSpace([string]$configuration.Agent.Memory.Sha256)) { throw 'Agent.Memory.Sha256 deve ficar vazio com Version=latest.' }
+        if ($configuration.Agent.Memory.RequireAssetDigest -ne $true) { throw 'Agent.Memory.RequireAssetDigest deve permanecer true.' }
+        if ([string]$configuration.Agent.Memory.Client -notmatch '^[a-z0-9][a-z0-9-]*$') { throw 'Agent.Memory.Client invalido.' }
+        if ([string]$configuration.Agent.Memory.ProjectStrategy -notin @('repo-root','basename')) { throw 'Agent.Memory.ProjectStrategy deve ser repo-root ou basename.' }
+        $serverUrlMatch = [regex]::Match([string]$configuration.Agent.Memory.ServerUrl, '^http://127\.0\.0\.1:([1-9][0-9]{0,4})$')
+        if (-not $serverUrlMatch.Success -or [int]$serverUrlMatch.Groups[1].Value -gt 65535) { throw 'Agent.Memory.ServerUrl deve usar loopback HTTP e uma porta valida.' }
+    }
     if (-not ($configuration.Agent.Workspace -is [hashtable])) { throw 'Agent.Workspace deve ser uma hashtable.' }
     foreach ($key in @('Mode','DefaultPath')) { Assert-PcSetupTableKey -Table $configuration.Agent.Workspace -Key $key -Path 'config.Agent.Workspace' }
     if ($configuration.Agent.Workspace.Mode -ne 'SelectedProjectOnly') { throw 'Agent.Workspace.Mode deve ser SelectedProjectOnly.' }
@@ -622,6 +650,22 @@ function Import-PcSetupWslProfile {
             Package        = [string]$Configuration.Agent.Harness.Package
             Version        = [string]$Configuration.Agent.Harness.Version
             Command        = [string]$Configuration.Agent.DefaultCommand
+        }
+    }
+    if ($Configuration.Agent.Enabled -and $Environment.Name -eq [string]$Configuration.Agent.Environment -and $Configuration.Agent.Memory.Enabled) {
+        foreach ($requiredPackage in @('ca-certificates','curl')) {
+            if ($packages -notcontains $requiredPackage) { throw "O perfil do ai-memory deve instalar o pacote APT $requiredPackage." }
+        }
+        $profile['AiMemory'] = @{
+            Enabled            = [bool]$Configuration.Agent.Memory.Enabled
+            Repository         = [string]$Configuration.Agent.Memory.Repository
+            Version            = [string]$Configuration.Agent.Memory.Version
+            Architecture       = [string]$Configuration.Agent.Memory.Architecture
+            Sha256             = [string]$Configuration.Agent.Memory.Sha256
+            RequireAssetDigest = [bool]$Configuration.Agent.Memory.RequireAssetDigest
+            Client             = [string]$Configuration.Agent.Memory.Client
+            ProjectStrategy    = [string]$Configuration.Agent.Memory.ProjectStrategy
+            ServerUrl          = [string]$Configuration.Agent.Memory.ServerUrl
         }
     }
     $profile['_ProfilePath'] = $path

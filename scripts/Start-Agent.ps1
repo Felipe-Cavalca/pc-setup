@@ -83,6 +83,15 @@ try {
     & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) -- bash -lc "command -v -- '$Command' >/dev/null"
     if ($LASTEXITCODE -ne 0) { throw "Agente '$Command' nao instalado para o usuario Linux $($profile.LinuxUser)." }
 
+    if ($profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
+        $memoryService = 'pc-setup-ai-memory-' + $environmentDefinition.Name.ToLowerInvariant() + '.service'
+        & wsl.exe --distribution $distribution --user root -- systemctl start $memoryService
+        if ($LASTEXITCODE -ne 0) { throw "Nao foi possivel iniciar o servico do ai-memory: $memoryService. Execute ATUALIZAR.cmd e consulte o relatorio WSL." }
+        $memoryServerUrl = [string]$profile.AiMemory.ServerUrl
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) -- env "AI_MEMORY_SERVER_URL=$memoryServerUrl" bash -c 'set -a; . "$HOME/.config/ai-memory/env"; set +a; /usr/local/bin/ai-memory status --json >/dev/null'
+        if ($LASTEXITCODE -ne 0) { throw "ai-memory nao respondeu em $memoryServerUrl. Execute ATUALIZAR.cmd e consulte o relatorio WSL." }
+    }
+
     $capabilities = $configuration.Agent.Capabilities
     $aiJailArguments = @(
         if ($capabilities.Network) { '--network' } else { '--no-network' }
@@ -106,6 +115,9 @@ try {
     }
     foreach ($exception in @($configuration.Agent.ProjectSecrets.DenyPathExceptions)) {
         $aiJailArguments += @('--deny-path-except', [string]$exception)
+    }
+    if ($profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
+        $aiJailArguments += @('--rw-map', "/home/$($profile.LinuxUser)/.local/share/ai-memory")
     }
     $aiJailArguments += @(
         '--private-home'
