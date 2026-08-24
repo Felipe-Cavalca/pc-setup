@@ -2,6 +2,8 @@
 
 As contas do Windows são definidas em `config\machine.psd1`. Os nomes são configuráveis; o projeto depende dos papéis e privilégios, não de nomes fixos.
 
+Cada conta habilitada pertence explicitamente ao grupo local `Usuários` (`S-1-5-32-545`). O setup resolve o grupo pelo SID para funcionar em qualquer idioma, habilita uma conta configurada que já exista desabilitada e valida essa associação antes de pedir a troca de sessão.
+
 | Papel | Chave | Privilégio | Finalidade |
 |---|---|---|---|
 | Usuário diário | `Accounts.DailyUser` | Standard após validação | Navegação, jogos, trabalho pessoal e chamada do agente |

@@ -51,6 +51,7 @@ Se pacotes, personalização ou WSL falharem depois que o Windows terminar, corr
 - nenhuma aplicação começa sem ponto de restauração válido;
 - a retomada após reinício preserva a escolha feita no plano;
 - `Felipe` permanece Administrador enquanto a conta `Admin` ainda não foi validada, conforme a configuração padrão;
+- todas as contas habilitadas aparecem como membros do grupo local `Usuários` e permitem logon; se a conta diária ainda não tiver bloco próprio, use `Outro usuário` com `.\Felipe` no primeiro acesso;
 - `Publico` é usuário padrão e recebe Edge e Chrome;
 - a distribuição `Ubuntu-24.04` usa o usuário diário como padrão;
 - o usuário Linux `agent` não tem `sudo`, mantém autenticação própria e usa o `ai-jail`;

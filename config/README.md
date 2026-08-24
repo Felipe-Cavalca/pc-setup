@@ -47,6 +47,8 @@ Use [`examples/machine-one-disk.psd1`](examples/machine-one-disk.psd1) como pont
 
 Cada entrada possui `Enabled`, `Name` e `Role`. Funções válidas: `Standard` e `Administrator`.
 
+Toda conta habilitada é reconciliada no grupo interno `Usuários` pelo SID conhecido do Windows, sem depender do idioma da instalação. Isso inclui contas administrativas: o grupo `Administradores` acrescenta privilégios, enquanto `Usuários` mantém o direito normal de logon interativo. Contas existentes desabilitadas são habilitadas quando continuam solicitadas pelo perfil.
+
 As únicas contas Windows declaradas são `DailyUser`, `RecoveryAdmin` e `Public`. A IA não recebe uma conta Windows; ela usa o usuário Linux definido pelo ambiente `Agent`.
 
 `Security.DemoteDailyUserAutomatically = $false` evita perder acesso administrativo antes do teste da conta de recuperação. O usuário diário só deve ser rebaixado depois que a conta administrativa configurada for validada.

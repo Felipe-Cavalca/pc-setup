@@ -117,6 +117,8 @@ foreach ($key in $featureMap.Keys) {
 try {
     $adminGroup = ([Security.Principal.SecurityIdentifier]'S-1-5-32-544').Translate([Security.Principal.NTAccount]).Value.Split('\')[-1]
     $adminMembers = @(Get-LocalGroupMember -Group $adminGroup -ErrorAction Stop)
+    $usersGroup = Get-LocalGroup -SID 'S-1-5-32-545' -ErrorAction Stop
+    $usersMembers = @(Get-LocalGroupMember -Group $usersGroup -ErrorAction Stop)
     $hyperVGroup = Get-LocalGroup -SID 'S-1-5-32-578' -ErrorAction SilentlyContinue
     $hyperVMembers = if ($hyperVGroup) { @(Get-LocalGroupMember -Group $hyperVGroup.Name -ErrorAction Stop) } else { @() }
     foreach ($account in @(Get-PcSetupAccounts -Configuration $configuration | Where-Object Enabled)) {
@@ -125,8 +127,11 @@ try {
             Add-Check -Status 'FAIL' -Name "Usuario $($account.Name)" -Detail 'conta ausente'
             continue
         }
-        Add-Check -Status 'PASS' -Name "Usuario $($account.Name)" -Detail 'conta presente'
-        $isAdmin = $null -ne ($adminMembers | Where-Object { $_.Name -match "\\$([regex]::Escape($account.Name))$" } | Select-Object -First 1)
+        Add-Check -Status $(if ($user.Enabled) { 'PASS' } else { 'FAIL' }) -Name "Usuario $($account.Name)" -Detail $(if ($user.Enabled) { 'conta presente e habilitada' } else { 'conta desabilitada' })
+        $userSid = [string]$user.SID.Value
+        $isLocalUser = $null -ne ($usersMembers | Where-Object { $_.SID -and $_.SID.Value -eq $userSid } | Select-Object -First 1)
+        Add-Check -Status $(if ($isLocalUser) { 'PASS' } else { 'FAIL' }) -Name "Logon $($account.Name)" -Detail $(if ($isLocalUser) { "membro do grupo local $($usersGroup.Name)" } else { "fora do grupo local $($usersGroup.Name)" })
+        $isAdmin = $null -ne ($adminMembers | Where-Object { $_.SID -and $_.SID.Value -eq $userSid } | Select-Object -First 1)
         if ($account.Role -eq 'Administrator') {
             Add-Check -Status $(if ($isAdmin) { 'PASS' } else { 'FAIL' }) -Name "Papel $($account.Name)" -Detail $(if ($isAdmin) { 'administrador' } else { 'nao e administrador' })
         }
@@ -137,7 +142,7 @@ try {
             Add-Check -Status $(if (-not $isAdmin) { 'PASS' } else { 'FAIL' }) -Name "Papel $($account.Name)" -Detail $(if ($isAdmin) { 'administrador indevido' } else { 'usuario padrao' })
         }
         $shouldManageHyperV = @($configuration.Security.HyperVAdministratorAccounts) -contains $account.Key
-        $managesHyperV = $null -ne ($hyperVMembers | Where-Object { $_.Name -match "\\$([regex]::Escape($account.Name))$" } | Select-Object -First 1)
+        $managesHyperV = $null -ne ($hyperVMembers | Where-Object { $_.SID -and $_.SID.Value -eq $userSid } | Select-Object -First 1)
         Add-Check -Status $(if ($shouldManageHyperV -eq $managesHyperV) { 'PASS' } else { 'FAIL' }) -Name "Hyper-V $($account.Name)" -Detail $(if ($managesHyperV) { 'membro de Hyper-V Administrators' } else { 'sem associacao explicita ao Hyper-V' })
     }
     if (@($configuration.Security.HyperVAdministratorAccounts).Count -gt 0 -and -not $hyperVGroup) { Add-Check -Status 'FAIL' -Name 'Hyper-V Administrators' -Detail 'grupo local ausente' }

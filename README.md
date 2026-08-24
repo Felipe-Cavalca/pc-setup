@@ -16,7 +16,7 @@ Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-
 - pergunta se deve usar um único segundo disco fixo com volume NTFS saudável, quando houver;
 - sem segundo disco, cria `Dados` no volume do Windows;
 - cria a estrutura de dados configurada;
-- cria as contas habilitadas no arquivo de configuração;
+- cria ou habilita as contas configuradas e garante sua associação ao grupo local `Usuários`, permitindo o primeiro logon;
 - preserva o usuário diário como administrador até a conta de recuperação ser testada;
 - aplica ACLs isolando dados pessoais e projetos, com backup e rollback;
 - valida a virtualização antes de habilitar Hyper-V, Windows Sandbox, Virtual Machine Platform e WSL;

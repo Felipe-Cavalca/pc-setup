@@ -166,6 +166,7 @@ try {
         if (-not $isDailyUser) {
             Write-Host ''
             Write-Host "[TROCA DE CONTA] A fase da maquina foi concluida. Entre na conta Windows $dailyUser e execute $LauncherName novamente." -ForegroundColor Yellow
+            Write-Host "A conta esta habilitada e pertence ao grupo local Usuarios. Se o bloco ainda nao aparecer, encerre a sessao e use Outro usuario com .\$dailyUser."
             Write-Host 'Pacotes, personalizacao e WSL serao aplicados no perfil correto sem repetir a fase administrativa.'
             exit 0
         }
