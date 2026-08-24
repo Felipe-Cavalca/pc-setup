@@ -59,7 +59,53 @@
             Shared       = 'Shared'
             VirtualMachines = 'VMs'
             Containers   = 'Containers'
+            Backups      = 'Backups'
         }
+
+        Integrations = @{
+            HyperV = @{
+                Enabled = $true
+                PathKey = 'VirtualMachines'
+                Mode    = 'Automatic'
+            }
+            Docker = @{
+                Enabled = $true
+                PathKey = 'Containers'
+                Mode    = 'ManualRequired'
+            }
+            Steam = @{
+                Enabled = $true
+                PathKey = 'Games'
+                Mode    = 'ManualRequired'
+            }
+            Epic = @{
+                Enabled = $true
+                PathKey = 'Games'
+                Mode    = 'ManualRequired'
+            }
+        }
+    }
+
+    Backup = @{
+        Enabled              = $true
+        StagingPathKey       = 'Backups'
+        SourcePathKeys       = @('PersonalData', 'Development')
+        ExternalDestination  = ''
+        VerifyHashes         = $true
+        NoAutomaticDeletion  = $true
+        RestoreTest = @{
+            Enabled          = $true
+            Destination      = '{LocalAppData}\pc-setup\restore-tests'
+            KeepRestoredCopy = $false
+        }
+    }
+
+    MachineAudit = @{
+        Enabled                     = $true
+        GenerateAfterReconciliation = $true
+        OutputDirectory             = '{Desktop}'
+        FileBaseName                = 'RESUMO-DA-MAQUINA'
+        Formats                     = @('Html', 'Markdown')
     }
 
     Accounts = @{
@@ -104,6 +150,14 @@
             Client             = 'codex'
             ProjectStrategy    = 'repo-root'
             ServerUrl          = 'http://127.0.0.1:49374'
+            LaunchMode         = 'Managed'
+        }
+
+        Launcher = @{
+            # Um unico AGENTE.cmd apresenta os modos; Enter usa o fluxo normal gerenciado.
+            DefaultMode  = 'Managed'
+            PromptForMode = $true
+            ReviewEnabled = $true
         }
 
         Workspace = @{
@@ -140,12 +194,23 @@
                 'secrets/**'
             )
             DenyPathExceptions = @()
+            PreflightMode      = 'Warn'
         }
+
+        # Somente nomes. Valores permanecem no ambiente local e nunca entram no repositorio.
+        EnvironmentAllowList = @()
 
         # Apenas reserva a decisao para uma configuracao futura; nenhuma VM e criada pelo setup.
         VirtualMachine = @{
             Enabled = $false
             Name    = 'Agent'
+        }
+
+        RestrictedMode = @{
+            Enabled  = $true
+            # O modo normal ja usa home privado e capacidades minimas. Lockdown deixa o projeto somente leitura
+            # e remove rede/estado de autenticacao, portanto nao serve para o Codex interativo padrao.
+            Lockdown = $false
         }
     }
 
@@ -162,6 +227,7 @@
         PreferredSource          = 'winget'
         PreferCurrentVersion     = $true
         InstallScope             = 'machine'
+        DefaultCriticality       = 'optional'
         Profiles                 = @('base', 'development', 'gaming')
         AllowOfflineFallback     = $true
         OfflineInstallerDirectory = 'installers'
@@ -195,6 +261,12 @@
         # Será habilitado quando existir um arquivo de plano de fundo revisado no projeto.
         Enabled       = $false
         WallpaperPath = ''
+    }
+
+    Versions = @{
+        Mode                    = 'Latest'
+        LockFile                = 'config\versions.lock.json'
+        CaptureKnownGood        = $true
     }
 
     Debloat = @{
@@ -240,6 +312,7 @@
         UserStateDirectory  = '{LocalAppData}\pc-setup'
         UserReportDirectory = '{LocalAppData}\pc-setup\reports'
         WingetInventoryPath = '{LocalAppData}\pc-setup\winget-installed.json'
+        KnownGoodVersionPath = '{LocalAppData}\pc-setup\versions-known-good.json'
         StopOnError     = $true
         RequirePlanBeforeApply = $true
     }

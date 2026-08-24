@@ -37,9 +37,11 @@ O segundo perfil reutiliza a distribuição, cria `agent`, bloqueia sua senha, r
 
 O bootstrap é idempotente. As versões dos pacotes APT, do harness, do `ai-jail` e do `ai-memory`, além dos hashes verificados, ficam em `/var/lib/pc-setup/<ambiente>/installed.tsv`; os relatórios PowerShell ficam em `%LOCALAPPDATA%\pc-setup\reports`.
 
+O perfil não instala dotfiles, temas ou aliases pessoais. VS Code Settings Sync, autenticação Git manual e os padrões do Terminal/PowerShell continuam sendo as fontes já escolhidas pelo usuário; o WSL versiona somente o baseline necessário para reproduzir usuários, pacotes, diretórios, permissões e agente.
+
 ## Executar uma IA
 
-`AGENTE.cmd` pode ser aberto pela conta Windows diária. Ele solicita o caminho de um projeto e executa `Agent.DefaultCommand` como o usuário Linux `agent`, dentro do `ai-jail`. Com `Workspace.DefaultPath = ''`, essa escolha ocorre em toda execução.
+`AGENTE.cmd` pode ser aberto pela conta Windows diária. Ele mostra os modos disponíveis, solicita o caminho de um projeto e executa `Agent.DefaultCommand` como o usuário Linux `agent`, dentro do `ai-jail`. Com `Workspace.DefaultPath = ''`, essa escolha ocorre em toda execução. Enter escolhe o modo normal gerenciado por `ai-memory run`; também há revisão somente leitura e compatibilidade direta.
 
 O perfil padrão:
 
@@ -48,6 +50,8 @@ O perfil padrão:
 - mantém home privado, Landlock, seccomp e limites de recursos habilitados;
 - recusa raízes de sistema, a raiz de um disco montado, homes inteiros, raízes configuradas de projetos e caminhos não canônicos;
 - libera escrita no projeto escolhido e no diretório local de dados do `ai-memory` usado pelos hooks.
+
+Esse conjunto corresponde a `RestrictedMode.Enabled = $true` com `Lockdown = $false`. A opção de revisão aplica `--lockdown` ao projeto, mas libera explicitamente rede e login para manter o Codex remoto funcional. Ela evita alterações no checkout, porém não substitui uma VM para conteúdo hostil porque o sandbox continua online e autenticado.
 
 O bootstrap instala ou atualiza o harness configurado. O comando padrão é `codex`; pacote, versão e comando podem ser trocados juntos em `Agent.Harness` e `Agent.DefaultCommand`.
 

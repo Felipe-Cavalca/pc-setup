@@ -111,6 +111,7 @@ if ($mode -eq 'Plan') {
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Diretorios' -RelativeScript 'scripts\20-directories.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Plan = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Usuarios locais' -RelativeScript 'scripts\30-users.ps1' -Arguments $common
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Permissoes NTFS' -RelativeScript 'scripts\40-permissions.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Plan = $true }
+    $baseReport.Steps += Invoke-PcSetupStep -Name 'Integracoes de armazenamento' -RelativeScript 'scripts\45-storage-integrations.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Plan = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Pacotes' -RelativeScript 'scripts\60-packages.ps1' -Arguments $common
     $baseReport.Steps += Invoke-PcSetupStep -Name 'WSL' -RelativeScript 'scripts\70-wsl.ps1' -Arguments $common
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Personalizacao' -RelativeScript 'scripts\80-personalization.ps1' -Arguments $common
@@ -214,6 +215,7 @@ try {
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Diretorios' -RelativeScript 'scripts\20-directories.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Apply = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Usuarios locais' -RelativeScript 'scripts\30-users.ps1' -Arguments @{ Config = $configuration._ConfigPath; AccountPasswords = $passwords; Apply = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'Permissoes NTFS' -RelativeScript 'scripts\40-permissions.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Apply = $true }
+    $baseReport.Steps += Invoke-PcSetupStep -Name 'Integracoes de armazenamento' -RelativeScript 'scripts\45-storage-integrations.ps1' -Arguments @{ Config = $configuration._ConfigPath; Storage = $storage; Apply = $true }
     $baseReport.Steps += Invoke-PcSetupStep -Name 'WSL' -RelativeScript 'scripts\70-wsl.ps1' -Arguments @{ Config = $configuration._ConfigPath; Apply = $true }
     $baseReport.Status = 'Completed'
     $baseReport.CompletedAt = (Get-Date).ToString('o')

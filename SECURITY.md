@@ -25,6 +25,10 @@ Não abra issue, commit ou relatório público contendo senhas, tokens, cookies,
 
 O `ai-memory` pode registrar prompts, respostas, eventos de ferramentas e resumos. As regras de negação do `ai-jail` reduzem o acesso direto a arquivos conhecidos, mas não removem um segredo que tenha sido colado no prompt ou apareça na saída de uma ferramenta. Trate `~/.local/share/ai-memory`, `~/.config/ai-memory/env`, a configuração do cliente e qualquer exportação da distribuição WSL como dados sensíveis.
 
+O preflight do launcher apenas avisa sobre caminhos sensíveis existentes e aplica as negações antes da sessão. Um arquivo criado depois da abertura ainda pode ser lido; encerre e reabra o agente depois de criar segredos. A lista de ambiente aceita nomes de variáveis, mas seus valores ficam legíveis para os processos dentro do sandbox quando forem explicitamente liberados.
+
+O modo de revisão deixa o projeto somente leitura, mas mantém rede e credenciais do Codex. Ele protege contra escrita acidental, não contra exfiltração por código hostil. Para esse caso, use uma VM descartável sem credenciais reutilizadas.
+
 Memória de agente é contexto histórico, não fonte de verdade. Código, testes, documentação revisada e estado observado da máquina continuam tendo precedência sobre recordações geradas ou consolidadas por IA.
 
 ## Reportar uma vulnerabilidade

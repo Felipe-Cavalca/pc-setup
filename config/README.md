@@ -43,6 +43,12 @@ Root                = '{SystemRoot}\Dados'
 
 Use [`examples/machine-one-disk.psd1`](examples/machine-one-disk.psd1) como ponto de partida.
 
+`Storage.Integrations` associa destinos lógicos às pastas. `HyperV` aceita aplicação automática e configura os padrões suportados pelo host. Docker, Steam e Epic usam `ManualRequired`: o projeto cria a pasta, mostra o procedimento e registra a pendência, mas não edita arquivos internos desses aplicativos.
+
+`Backup` usa uma pasta de `Storage.Paths` como staging. `SourcePathKeys` seleciona as origens, `ExternalDestination = ''` pergunta o destino no momento da exportação e `NoAutomaticDeletion = $true` impede retenção destrutiva. `RestoreTest` restaura o snapshot mais recente em uma pasta temporária, valida os hashes e, quando `KeepRestoredCopy = $false`, remove somente a cópia de teste depois do sucesso. O staging no mesmo disco é útil para organização e recuperação rápida, mas somente a exportação para outro armazenamento constitui uma cópia independente.
+
+`MachineAudit` controla o resumo local. O padrão gera HTML e Markdown na Área de Trabalho ao final de `INSTALAR.cmd` ou `ATUALIZAR.cmd`; o nome e o diretório podem ser alterados. A auditoria é informativa e tolera recursos indisponíveis, registrando-os como tal sem tentar corrigir firmware, drivers ou criptografia.
+
 ## Contas
 
 Cada entrada possui `Enabled`, `Name` e `Role`. Funções válidas: `Standard` e `Administrator`.
@@ -83,6 +89,12 @@ Agent = @{
         Client             = 'codex'
         ProjectStrategy    = 'repo-root'
         ServerUrl          = 'http://127.0.0.1:49374'
+        LaunchMode         = 'Managed'
+    }
+    Launcher = @{
+        DefaultMode   = 'Managed'
+        PromptForMode = $true
+        ReviewEnabled = $true
     }
     Workspace = @{
         Mode        = 'SelectedProjectOnly'
@@ -108,7 +120,9 @@ Agent = @{
     ProjectSecrets = @{
         DenyPaths = @('.env', '.env.local', '.env.*.local', 'credentials.json', 'secrets/**')
         DenyPathExceptions = @()
+        PreflightMode = 'Warn'
     }
+    EnvironmentAllowList = @()
     VirtualMachine = @{
         Enabled = $false
         Name    = 'Agent'
@@ -118,7 +132,7 @@ Agent = @{
 
 `Harness` instala o pacote no prefixo NPM do usuário Linux `agent`. `latest` busca a versão atual em cada aplicação; uma versão SemVer exata fixa o resultado. `DefaultCommand` precisa corresponder ao executável fornecido pelo pacote.
 
-`Agent.Memory` instala a release nativa do `akitaonrails/ai-memory` no ambiente `Agent`, integra MCP e hooks ao cliente configurado e mantém o servidor em loopback. `latest` exige o digest SHA-256 publicado pela release; uma versão SemVer exata exige `Sha256` explícito. O perfil padrão usa `Client = 'codex'` e `ProjectStrategy = 'repo-root'`, evitando que mudanças para subdiretórios fragmentem a memória do mesmo repositório.
+`Agent.Memory` instala a release nativa do `akitaonrails/ai-memory` no ambiente `Agent`, integra MCP e hooks ao cliente configurado e mantém o servidor em loopback. `latest` exige o digest SHA-256 publicado pela release; uma versão SemVer exata exige `Sha256` explícito. O perfil padrão usa `Client = 'codex'`, `ProjectStrategy = 'repo-root'` e `LaunchMode = 'Managed'`, evitando que mudanças para subdiretórios fragmentem a memória e permitindo continuidade por `ai-memory run`.
 
 Perfis antigos sem a seção `Memory` continuam válidos e recebem memória desabilitada em tempo de execução. Isso preserva a compatibilidade sem ativar persistência de dados silenciosamente.
 
@@ -132,13 +146,21 @@ Se `DefaultPath` for preenchido, aponte para um projeto abaixo da raiz, por exem
 
 A autenticação do harness e as credenciais Git não são automatizadas. Elas pertencem ao home do usuário Linux `agent` e devem ser liberadas manualmente. A VM permanece apenas como opção declarada; não há criação automática.
 
-`ProjectSecrets` adiciona regras `--deny-path` em toda abertura do agente. Os caminhos são relativos ao projeto escolhido e não podem apontar para fora dele. Se a seção estiver ausente em um perfil antigo, o carregador aplica em memória a lista segura mostrada acima. Exceções são possíveis em `DenyPathExceptions`, mas devem ser restritas a arquivos comprovadamente não secretos. Uma configuração `.ai-jail` versionada no próprio projeto pode acrescentar proteções específicas.
+`RestrictedMode.Enabled = $true` exige o conjunto conservador de capacidades do perfil padrão: sem Docker, SSH, interface gráfica, ambiente herdado ou outros canais privilegiados. `Lockdown = $false` preserva projeto gravável, rede e autenticação persistente, necessários ao Codex interativo. Se `Lockdown` for ativado, o `ai-jail` passa a executar em modo estrito, somente leitura, efêmero e sem rede; esse modo é adequado a comandos locais de inspeção, não ao fluxo normal do Codex.
+
+`Launcher.PromptForMode = $true` evita depender de memorizar comandos: `AGENTE.cmd` mostra o fluxo normal gerenciado, revisão somente leitura e compatibilidade direta. O modo de revisão ainda libera rede e o estado de login do Codex; portanto, não substitui uma VM para conteúdo hostil.
+
+`ProjectSecrets` adiciona regras `--deny-path` em toda abertura do agente. `PreflightMode = 'Warn'` informa correspondências existentes antes da sessão. Os caminhos são relativos ao projeto escolhido e não podem apontar para fora dele. As regras alcançam somente arquivos existentes quando o sandbox é construído; encerre e reabra o agente depois de criar um novo segredo. Exceções devem ser restritas a arquivos comprovadamente não secretos.
+
+`EnvironmentAllowList` aceita somente nomes de variáveis. O launcher repassa seus valores do ambiente local com `--env NOME`; valores e segredos continuam fora do PSD1. `InheritEnvironment` permanece desabilitado.
 
 ## Pacotes
 
-`Packages.Profiles` seleciona arquivos de `config/packages`. Cada linha usa `ID|escopo`, por exemplo `Google.Chrome|machine` ou `Microsoft.WindowsTerminal|user`. Uma linha somente com o ID usa `Packages.InstallScope` como padrão.
+`Packages.Profiles` seleciona arquivos de `config/packages`. Cada linha usa `ID|escopo|criticidade`, por exemplo `Google.Chrome|machine|optional` ou `Git.Git|machine|required`. Linhas antigas sem os campos usam `Packages.InstallScope` e `Packages.DefaultCriticality`.
 
-`Packages.InstallScope` aceita `machine` ou `user`; o perfil padrão usa `machine`, mas cada pacote pode sobrescrever o valor. Chrome permanece em `machine` para ficar disponível às contas locais. Bitwarden, PowerShell e Windows Terminal usam `user`. A fase Winget roda na conta diária e instaladores de máquina podem solicitar UAC por conta própria.
+`Packages.InstallScope` aceita `machine` ou `user`; `required` interrompe quando a versão não pode ser confirmada e `optional` deixa uma pendência para `ATUALIZAR.cmd`. Chrome, Brave e Yubico Authenticator permanecem em `machine`; Bitwarden, PowerShell e Windows Terminal usam `user`. A fase Winget roda na conta diária e instaladores de máquina podem solicitar UAC por conta própria.
+
+O pacote Yubico instala somente o Authenticator. Registro da chave, PIN, passkeys, contas e códigos de recuperação não fazem parte da automação.
 
 O fallback fica em `offline-installers.psd1`. Cada entrada exige `PackageId`, caminho relativo, SHA-256, argumentos silenciosos e `Scope` igual ao escopo configurado. O diretório padrão é `installers` na raiz do projeto.
 
@@ -161,6 +183,8 @@ O perfil `wsl\profiles\agent.psd1` declara usuário sem privilégios, workspace 
 ## Inventário do Winget
 
 `Runtime.StateDirectory` e `Runtime.ReportDirectory` guardam estado e relatórios elevados em `%ProgramData%`. `UserStateDirectory`, `UserReportDirectory` e `WingetInventoryPath` ficam em `%LOCALAPPDATA%` da conta diária, permitindo que a fase sem elevação registre IDs, versões, fontes e personalização. Esses arquivos são estado local gerado e não devem ser adicionados ao repositório.
+
+`Versions.Mode = 'Latest'` busca versões atuais. `CaptureKnownGood = $true` grava um snapshot local após Winget e WSL terminarem validados. `FIXAR-VERSOES.cmd` exporta um arquivo sem segredos para `Versions.LockFile`; com `Mode = 'Locked'`, cada pacote configurado precisa ter uma versão e o Winget recebe `--version`. O modo fixado é destinado principalmente a instalação limpa e não autoriza downgrade automático.
 
 ## Recuperação
 
@@ -187,7 +211,7 @@ BitLockerMode         = 'DoNotConfigure'
 ReportBitLockerStatus = $true
 ```
 
-O setup não ativa, suspende, desativa nem exige criptografia.
+O setup não ativa, suspende, desativa, armazena chave de recuperação nem exige criptografia. A ativação do BitLocker e a guarda da chave devem ser feitas manualmente fora do projeto, depois da validação da máquina.
 
 ## Personalização e debloat
 

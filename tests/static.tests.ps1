@@ -27,17 +27,22 @@ Assert-True ($config.Agent.Memory.Version -eq 'latest' -and $config.Agent.Memory
 Assert-True ($config.Agent.Memory.Client -eq 'codex' -and $config.Agent.Memory.ProjectStrategy -eq 'repo-root') 'ai-memory deve integrar o Codex por raiz do repositorio.'
 Assert-True ($config.Agent.Memory.ServerUrl -eq 'http://127.0.0.1:49374') 'ai-memory deve permanecer restrito ao loopback.'
 Assert-True ($config.Agent.Workspace.Mode -eq 'SelectedProjectOnly') 'O agente deve acessar somente o projeto selecionado.'
+Assert-True ($config.Agent.RestrictedMode.Enabled -and -not $config.Agent.RestrictedMode.Lockdown) 'O agente deve usar o perfil restrito gravavel, sem lockdown estrito por padrao.'
 Assert-True (-not $config.Agent.VirtualMachine.Enabled) 'Nenhuma VM deve ser criada por padrao.'
 Assert-True (@($config.Security.HyperVAdministratorAccounts) -contains 'DailyUser') 'O usuario diario deve administrar o Hyper-V.'
 Assert-True ($config.Accounts.Public.Enabled -and $config.Accounts.Public.Role -eq 'Standard') 'Conta Publico deve estar habilitada sem privilegio administrativo.'
+Assert-True ($config.Backup.Enabled -and $config.Backup.VerifyHashes -and $config.Backup.NoAutomaticDeletion) 'O backup local deve verificar hashes e nunca apagar automaticamente.'
+Assert-True ($config.Versions.Mode -eq 'Latest' -and $config.Versions.CaptureKnownGood) 'O perfil deve buscar versoes atuais e capturar o estado conhecido como bom.'
 
 $debloatScript = Get-Content -Raw -LiteralPath (Join-Path $root 'scripts\50-debloat-akita.ps1')
 Assert-True ($debloatScript -match "'-RunDefaults', '-Silent', '-AppRemovalTarget'") 'O wrapper deve aplicar o preset fixo de forma silenciosa.'
 Assert-True ($config.Debloat.ArchiveSha256 -eq 'e97c8e36698c7b543da0b77cc34439c1a0b4917525b45a9d1ae7a02e23d4711d') 'O ZIP revisado do debloat deve ter SHA-256 fixo.'
 
 $basePackages = Get-Content -LiteralPath (Join-Path $root 'config\packages\base.txt') | Where-Object { $_ -and -not $_.StartsWith('#') }
-Assert-True (@($basePackages) -contains 'Google.Chrome|machine') 'Chrome deve estar instalado para todas as contas no escopo de maquina.'
-Assert-True (@($basePackages | Where-Object { $_ -match 'Brave|Discord|Spotify|WhatsApp' }).Count -eq 0) 'O perfil base nao deve adicionar outros aplicativos solicitados anteriormente para a conta publica.'
+Assert-True (@($basePackages) -contains 'Google.Chrome|machine|optional') 'Chrome deve estar disponivel para todas as contas no escopo de maquina.'
+Assert-True (@($basePackages) -contains 'Brave.Brave|machine|optional') 'Brave deve estar disponivel como pacote opcional.'
+Assert-True (@($basePackages) -contains 'Yubico.Authenticator|machine|optional') 'Yubico Authenticator deve estar disponivel como pacote opcional.'
+Assert-True (@($basePackages | Where-Object { $_ -match 'Discord|Spotify|WhatsApp' }).Count -eq 0) 'O perfil base nao deve instalar comunicadores para todas as contas.'
 
 $launcher = Get-Content -Raw -LiteralPath (Join-Path $root 'INSTALAR.cmd')
 Assert-True ($launcher -match 'Start-PcSetupUpdate\.ps1' -and $launcher -match '-LauncherName INSTALAR\.cmd') 'O instalador deve chamar o orquestrador completo.'

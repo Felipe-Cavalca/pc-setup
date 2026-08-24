@@ -51,7 +51,37 @@
             Shared       = 'Shared'
             VirtualMachines = 'VMs'
             Containers   = 'Containers'
+            Backups      = 'Backups'
         }
+
+        Integrations = @{
+            HyperV = @{ Enabled = $false; PathKey = 'VirtualMachines'; Mode = 'Automatic' }
+            Docker = @{ Enabled = $false; PathKey = 'Containers'; Mode = 'ManualRequired' }
+            Steam  = @{ Enabled = $false; PathKey = 'Games'; Mode = 'ManualRequired' }
+            Epic   = @{ Enabled = $false; PathKey = 'Games'; Mode = 'ManualRequired' }
+        }
+    }
+
+    Backup = @{
+        Enabled              = $false
+        StagingPathKey       = 'Backups'
+        SourcePathKeys       = @('PersonalData', 'Development')
+        ExternalDestination  = ''
+        VerifyHashes         = $true
+        NoAutomaticDeletion  = $true
+        RestoreTest = @{
+            Enabled          = $false
+            Destination      = '{LocalAppData}\pc-setup\restore-tests'
+            KeepRestoredCopy = $false
+        }
+    }
+
+    MachineAudit = @{
+        Enabled                     = $true
+        GenerateAfterReconciliation = $true
+        OutputDirectory             = '{Desktop}'
+        FileBaseName                = 'RESUMO-DA-MAQUINA'
+        Formats                     = @('Html', 'Markdown')
     }
 
     Accounts = @{
@@ -94,6 +124,13 @@
             Client             = 'codex'
             ProjectStrategy    = 'repo-root'
             ServerUrl          = 'http://127.0.0.1:49374'
+            LaunchMode         = 'Direct'
+        }
+
+        Launcher = @{
+            DefaultMode   = 'Direct'
+            PromptForMode = $false
+            ReviewEnabled = $false
         }
         Workspace = @{
             Mode        = 'SelectedProjectOnly'
@@ -125,10 +162,18 @@
                 'secrets/**'
             )
             DenyPathExceptions = @()
+            PreflightMode      = 'Warn'
         }
+
+        EnvironmentAllowList = @()
         VirtualMachine = @{
             Enabled = $false
             Name    = 'Agent'
+        }
+
+        RestrictedMode = @{
+            Enabled  = $false
+            Lockdown = $true
         }
     }
 
@@ -145,6 +190,7 @@
         PreferredSource           = 'winget'
         PreferCurrentVersion      = $true
         InstallScope              = 'machine'
+        DefaultCriticality        = 'optional'
         Profiles                  = @('base')
         AllowOfflineFallback      = $true
         OfflineInstallerDirectory = 'installers'
@@ -177,6 +223,12 @@
     Personalization = @{
         Enabled       = $false
         WallpaperPath = ''
+    }
+
+    Versions = @{
+        Mode                    = 'Latest'
+        LockFile                = 'config\versions.lock.json'
+        CaptureKnownGood        = $true
     }
 
     Debloat = @{
@@ -222,6 +274,7 @@
         UserStateDirectory  = '{LocalAppData}\pc-setup'
         UserReportDirectory = '{LocalAppData}\pc-setup\reports'
         WingetInventoryPath = '{LocalAppData}\pc-setup\winget-installed.json'
+        KnownGoodVersionPath = '{LocalAppData}\pc-setup\versions-known-good.json'
         StopOnError     = $true
         RequirePlanBeforeApply = $true
     }

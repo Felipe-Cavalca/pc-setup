@@ -48,7 +48,17 @@ O Winget não é reiniciado com outra conta administrativa, pois as fontes e o A
 
 Os backups ficam em `%ProgramData%\pc-setup\acl-backups`. Cada execução contém `manifest.json` e arquivos aceitos por `icacls /restore`. Prefira restaurar somente a execução e a pasta afetadas, em um Windows PowerShell elevado, depois de conferir os caminhos no manifesto.
 
+## Backup de arquivos pessoais
+
+`BACKUP.cmd` cria um snapshot local datado das origens configuradas e valida seu manifesto SHA-256. O snapshot fica em `Storage.Paths.Backups`, no mesmo armazenamento da raiz de dados; ele é uma área de preparação, não protege contra falha ou perda desse disco.
+
+Conecte a unidade externa somente quando necessário e execute `EXPORTAR-BACKUP.cmd`. O destino é solicitado quando `Backup.ExternalDestination` está vazio, a cópia fica sob `pc-setup-backups` e é verificada antes de ser declarada concluída. Uma pasta sincronizada pelo Google Drive pode ser informada manualmente, mas o cliente de sincronização e suas credenciais permanecem fora do script. `VERIFICAR-BACKUP.cmd` confere novamente o snapshot local mais recente.
+
+`TESTAR-RESTAURACAO.cmd` faz uma restauração completa do snapshot mais recente em `Backup.RestoreTest.Destination`, confere todos os hashes e grava um relatório em `%LOCALAPPDATA%\pc-setup\reports`. Com `KeepRestoredCopy = $false`, somente a cópia temporária validada é removida; o snapshot nunca é apagado. Em caso de falha, a cópia incompleta é preservada para diagnóstico.
+
 ## WSL
+
+Se a instalação mostrar um caminho como `wslpath: C:pc-setup-mainwsllinuxbootstrap.sh`, o Ubuntu já foi instalado; a falha ocorreu somente na conversão do caminho Windows. Use uma versão do projeto que execute `wslpath` por `wsl.exe --exec` e rode novamente `INSTALAR.cmd` ou `ATUALIZAR.cmd` na conta diária. A reconciliação é idempotente e retoma o ambiente, portanto não é necessário recriar a VM nem reinstalar a distribuição.
 
 Antes de mudanças importantes em uma distribuição existente:
 
