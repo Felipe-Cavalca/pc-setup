@@ -1,6 +1,6 @@
 # Ferramentas de desenvolvimento.
 Git.Git|machine
-Microsoft.PowerShell|machine
+Microsoft.PowerShell|user
 Microsoft.WindowsTerminal|user
 Microsoft.VisualStudioCode|machine
 Docker.DockerDesktop|machine

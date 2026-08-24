@@ -59,11 +59,31 @@ if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
     throw 'Winget nao encontrado. Atualize o App Installer pela Microsoft Store e tente novamente.'
 }
 
+Write-Host '[WINGET] Atualizando a fonte winget da conta diaria.' -ForegroundColor Cyan
+& winget.exe source update --name winget --disable-interactivity | Out-Host
+$sourceUpdateExitCode = $LASTEXITCODE
+$wingetSourceReady = $sourceUpdateExitCode -eq 0
+if ($sourceUpdateExitCode -ne 0) {
+    Write-Warning "A fonte winget nao pode ser atualizada (codigo $sourceUpdateExitCode). Os fallbacks offline configurados serao avaliados."
+}
+
 function Invoke-WingetOnline {
     param([Parameter(Mandatory)][string]$PackageId, [Parameter(Mandatory)][string]$Scope, [int]$RetryCount)
 
-    & winget.exe list --id $PackageId --exact --scope $Scope --disable-interactivity | Out-Host
-    $isInstalled = $LASTEXITCODE -eq 0
+    $wingetNoApplicationsFound = -1978335212
+    $wingetCommandRequiresAdmin = -1978335207
+    $wingetNoApplicableUpgrade = -1978335189
+
+    if (-not $wingetSourceReady) {
+        return [pscustomobject]@{ Success = $false; Operation = 'source-update'; ExitCode = $sourceUpdateExitCode; Status = 'SourceUnavailable' }
+    }
+
+    & winget.exe list --id $PackageId --exact --source winget --scope $Scope --accept-source-agreements --disable-interactivity | Out-Host
+    $listExitCode = $LASTEXITCODE
+    if ($listExitCode -notin @(0, $wingetNoApplicationsFound)) {
+        return [pscustomobject]@{ Success = $false; Operation = 'list'; ExitCode = $listExitCode; Status = 'SourceQueryFailed' }
+    }
+    $isInstalled = $listExitCode -eq 0
     $operation = if ($isInstalled) { 'upgrade' } else { 'install' }
     $attempt = 0
     do {
@@ -72,19 +92,28 @@ function Invoke-WingetOnline {
         & winget.exe $operation --id $PackageId --exact --source winget --scope $Scope --silent --accept-source-agreements --accept-package-agreements --disable-interactivity | Out-Host
         $exitCode = $LASTEXITCODE
         if ($exitCode -eq 0) { return [pscustomobject]@{ Success = $true; Operation = $operation; ExitCode = 0; Status = 'Success' } }
-        if ($isInstalled -and $exitCode -eq -1978335189) {
+        if ($isInstalled -and $exitCode -eq $wingetNoApplicableUpgrade) {
             return [pscustomobject]@{ Success = $true; Operation = $operation; ExitCode = $exitCode; Status = 'PresentNoApplicableUpgrade' }
         }
-        if ($attempt -le $RetryCount) { Write-Warning "Winget falhou para $PackageId com codigo $LASTEXITCODE; repetindo." }
+        if ($exitCode -eq $wingetCommandRequiresAdmin) {
+            Write-Warning "O manifesto de $PackageId exige o Winget em contexto administrativo. O pc-setup preserva o Winget na conta diaria e avaliara o fallback offline."
+            return [pscustomobject]@{ Success = $false; Operation = $operation; ExitCode = $exitCode; Status = 'RequiresAdministrator' }
+        }
+        if ($attempt -le $RetryCount) { Write-Warning "Winget falhou para $PackageId com codigo $exitCode; repetindo." }
     } while ($attempt -le $RetryCount)
     return [pscustomobject]@{ Success = $false; Operation = $operation; ExitCode = $exitCode; Status = 'Failed' }
 }
 
 function Invoke-OfflineInstaller {
-    param([Parameter(Mandatory)][string]$PackageId, [Parameter(Mandatory)][string]$Scope)
+    param(
+        [Parameter(Mandatory)][string]$PackageId,
+        [Parameter(Mandatory)][string]$Scope,
+        [Parameter(Mandatory)][string]$OnlineStatus,
+        [Parameter(Mandatory)][int]$OnlineExitCode
+    )
 
     $entry = $offlineInstallers | Where-Object { $_.PackageId -eq $PackageId } | Select-Object -First 1
-    if (-not $entry) { throw "Winget falhou e nao ha fallback offline configurado para $PackageId." }
+    if (-not $entry) { throw "Winget falhou para $PackageId (status $OnlineStatus, codigo $OnlineExitCode) e nao ha fallback offline configurado." }
     if ([string]$entry.Scope -ne $Scope) { throw "O fallback offline de $PackageId nao corresponde ao escopo $Scope." }
     if ([string]::IsNullOrWhiteSpace([string]$entry.Sha256) -or [string]$entry.Sha256 -notmatch '^[a-fA-F0-9]{64}$') {
         throw "SHA-256 offline invalido para $PackageId."
@@ -116,8 +145,8 @@ foreach ($definition in $packageDefinitions) {
         $results += [pscustomobject]@{ PackageId = $id; Source = 'winget'; Scope = $installScope; Operation = $online.Operation; Status = $online.Status; ExitCode = $online.ExitCode }
         continue
     }
-    if (-not $configuration.Packages.AllowOfflineFallback) { throw "Winget falhou para $id e o fallback offline esta desabilitado." }
-    $exitCode = Invoke-OfflineInstaller -PackageId $id -Scope $installScope
+    if (-not $configuration.Packages.AllowOfflineFallback) { throw "Winget falhou para $id (status $($online.Status), codigo $($online.ExitCode)) e o fallback offline esta desabilitado." }
+    $exitCode = Invoke-OfflineInstaller -PackageId $id -Scope $installScope -OnlineStatus $online.Status -OnlineExitCode $online.ExitCode
     $results += [pscustomobject]@{ PackageId = $id; Source = 'offline'; Scope = $installScope; Status = 'Success'; ExitCode = $exitCode }
 }
 

@@ -182,11 +182,13 @@ Os perfis ficam em [`config/packages`](config/packages):
 - `development`: Git, PowerShell, Windows Terminal, VS Code e Docker Desktop;
 - `gaming`: Steam e Epic Games Launcher.
 
-O Winget consulta a fonte oficial configurada no Windows e tenta instalar a versão atual. Cada linha do perfil declara `ID|escopo`; `Packages.InstallScope` é apenas o padrão para linhas sem escopo. Chrome e os aplicativos tradicionais usam `machine`; Bitwarden e Windows Terminal usam `user`, pois seus instaladores atuais são próprios da conta. Em caso de falha, um instalador offline só é aceito quando consta em [`config/offline-installers.psd1`](config/offline-installers.psd1), declara o mesmo escopo, existe dentro da pasta permitida e tem SHA-256 idêntico ao manifesto.
+O Winget consulta a fonte oficial configurada no Windows e tenta instalar a versão atual. Cada linha do perfil declara `ID|escopo`; `Packages.InstallScope` é apenas o padrão para linhas sem escopo. Chrome e os aplicativos tradicionais usam `machine`; Bitwarden, PowerShell e Windows Terminal usam `user`, preservando a instalação no perfil diário quando o pacote oferece esse escopo. Em caso de falha, um instalador offline só é aceito quando consta em [`config/offline-installers.psd1`](config/offline-installers.psd1), declara o mesmo escopo, existe dentro da pasta permitida e tem SHA-256 idêntico ao manifesto.
 
 O fallback offline pode estar atrás da versão publicada. O inventário registra o que foi realmente instalado e a próxima execução com acesso à internet tenta atualizar novamente.
 
 Ao final da etapa, as versões realmente encontradas pelo `winget export --include-versions` são registradas em `%LOCALAPPDATA%\pc-setup\winget-installed.json` da conta diária e arquivadas junto aos relatórios da fase do usuário.
+
+Se o Winget não conseguir abrir a fonte padrão ou retornar `0x80070005`, siga o procedimento em [Winget sem acesso à fonte padrão](docs/RECUPERACAO.md#winget-sem-acesso-à-fonte-padrão).
 
 ## WSL e agente de IA
 

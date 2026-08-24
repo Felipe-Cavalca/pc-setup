@@ -38,6 +38,7 @@ jobs:
         shell: powershell
         run: |
           .\tests\run-all.ps1
+          .\tests\winget-context.tests.ps1
           .\tests\security-hardening.tests.ps1
           .\tests\local-accounts.tests.ps1
 
