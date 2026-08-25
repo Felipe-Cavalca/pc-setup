@@ -56,9 +56,15 @@ Os backups ficam em `%ProgramData%\pc-setup\acl-backups`. Cada execução conté
 
 `BACKUP.cmd` cria um snapshot local datado das origens configuradas e valida seu manifesto SHA-256. O snapshot fica em `Storage.Paths.Backups`, no mesmo armazenamento da raiz de dados; ele é uma área de preparação, não protege contra falha ou perda desse disco.
 
+O perfil padrão inclui `Dev` e as pastas pessoais mantidas em `C:\Users\Felipe`. A cópia usa `/XJ`, portanto não percorre a junção `Data` e não duplica o perfil. `Backups` é global na raiz de dados, mas sua ACL permite acesso somente ao usuário diário, SYSTEM e Administradores.
+
+O snapshot não copia executáveis instalados, `Apps`, `Games`, `Containers` nem `VMs`. Com `IncludeSetupInventory = $true`, ele guarda em `SetupInventory` o manifesto realmente exportado pelo Winget e o estado `known-good` validado, quando esses arquivos já existem. Assim, os programas podem ser baixados novamente sem ocupar o backup com cópias dos instaladores; arquivos pessoais e projetos continuam sendo copiados porque um manifesto não consegue recuperá-los.
+
 Conecte a unidade externa somente quando necessário e execute `EXPORTAR-BACKUP.cmd`. O destino é solicitado quando `Backup.ExternalDestination` está vazio, a cópia fica sob `pc-setup-backups` e é verificada antes de ser declarada concluída. Uma pasta sincronizada pelo Google Drive pode ser informada manualmente, mas o cliente de sincronização e suas credenciais permanecem fora do script. `VERIFICAR-BACKUP.cmd` confere novamente o snapshot local mais recente.
 
 `TESTAR-RESTAURACAO.cmd` faz uma restauração completa do snapshot mais recente em `Backup.RestoreTest.Destination`, confere todos os hashes e grava um relatório em `%LOCALAPPDATA%\pc-setup\reports`. Com `KeepRestoredCopy = $false`, somente a cópia temporária validada é removida; o snapshot nunca é apagado. Em caso de falha, a cópia incompleta é preservada para diagnóstico.
+
+Se uma versão anterior redirecionou Área de Trabalho, Documentos ou outras pastas para `<raiz antiga>\Data\<usuario>`, execute `PERSONALIZAR.cmd`. A etapa copia os arquivos de volta e restaura os ponteiros do Windows, mas preserva a árvore antiga. Compare os dois locais antes de excluir qualquer conteúdo manualmente.
 
 ## WSL
 
@@ -69,6 +75,8 @@ Se `DailyUser` passar e o ambiente `Agent` terminar com `Unknown argument: true`
 Se a reconciliação do `Agent` for interrompida mostrando apenas uma linha informativa como `INFO ai_memory: ai-memory starting`, o serviço provavelmente iniciou corretamente, mas uma versão antiga do módulo PowerShell interpretou o `stderr` como exceção antes de consultar o código de saída. Atualize o projeto e execute `ATUALIZAR.cmd` novamente. A correção preserva o texto no diagnóstico e considera sucesso somente quando o processo nativo retorna código `0`.
 
 Se todos os itens do `Agent` passarem, mas `Agent harness` mostrar a mesma versão em `installed` e `recorded`, atualize o projeto para uma versão que compare os destinos canônicos da cadeia de links criada pelo NPM. O Codex já foi instalado; execute `ATUALIZAR.cmd` novamente para refazer somente a verificação. Versões corrigidas também mostram `launcher`, `expected`, `command_ok` e `output` quando houver uma falha real do executável.
+
+Se `AGENTE.cmd` mostrar `Cannot use import statement outside a module` em `~/.local/bin/codex`, o Node recebeu somente o arquivo apontado pelo link NPM e não encontrou o `package.json` que declara o módulo ES. A correção mantém o `private-home`, mapeia em leitura somente o escopo NPM controlado `@openai` e executa o ponto de entrada canônico dentro de `@openai/codex`. Isso também cobre o pacote opcional que contém o binário Linux. Atualize o repositório, execute `ATUALIZAR.cmd` uma vez e abra `AGENTE.cmd` novamente. Não é necessário recriar a VM nem reinstalar o Ubuntu.
 
 Antes de mudanças importantes em uma distribuição existente:
 

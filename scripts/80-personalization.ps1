@@ -77,6 +77,58 @@ function Copy-PcSetupKnownFolderContent {
     if ($exitCode -gt 7) { throw "Nao foi possivel copiar o conteudo de $Source para $Destination. Robocopy: $exitCode." }
 }
 
+function Set-PcSetupProfileJunction {
+    param(
+        [Parameter(Mandatory)][string]$ParentPath,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$TargetPath
+    )
+
+    $linkPath = [IO.Path]::GetFullPath((Join-Path $ParentPath $Name))
+    $expectedTarget = [IO.Path]::GetFullPath($TargetPath).TrimEnd('\')
+    if (Test-Path -LiteralPath $linkPath) {
+        $item = Get-Item -LiteralPath $linkPath -Force
+        $actualTarget = @($item.Target) | Select-Object -First 1
+        $isJunction = ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -and [string]$item.LinkType -eq 'Junction'
+        if (-not $isJunction -or [string]::IsNullOrWhiteSpace([string]$actualTarget) -or [IO.Path]::GetFullPath([string]$actualTarget).TrimEnd('\') -ne $expectedTarget) {
+            throw "O caminho $linkPath ja existe e nao e a juncao esperada para $expectedTarget. Ele nao foi alterado nem removido."
+        }
+        return [pscustomobject]@{ Path = $linkPath; Target = $expectedTarget; Action = 'AlreadyConfigured' }
+    }
+
+    if (-not (Test-Path -LiteralPath $ParentPath -PathType Container)) { throw "A pasta do usuario nos dados ainda nao existe: $ParentPath" }
+    New-Item -ItemType Junction -Path $linkPath -Target $expectedTarget -ErrorAction Stop | Out-Null
+    $created = Get-Item -LiteralPath $linkPath -Force
+    $createdTarget = @($created.Target) | Select-Object -First 1
+    if ([string]$created.LinkType -ne 'Junction' -or [IO.Path]::GetFullPath([string]$createdTarget).TrimEnd('\') -ne $expectedTarget) {
+        throw "A juncao criada em $linkPath nao aponta para $expectedTarget."
+    }
+    return [pscustomobject]@{ Path = $linkPath; Target = $expectedTarget; Action = 'Created' }
+}
+
+function Set-PcSetupGoogleDriveStreamingMountPoint {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $mountPoint = [IO.Path]::GetFullPath($Path).TrimEnd('\')
+    if (-not (Test-Path -LiteralPath $mountPoint -PathType Container)) { throw "A pasta do Google Drive ainda nao existe: $mountPoint" }
+    $registryPath = 'HKCU:\Software\Google\DriveFS'
+    $current = $null
+    if (Test-Path -LiteralPath $registryPath) {
+        $current = Get-ItemPropertyValue -LiteralPath $registryPath -Name 'DefaultMountPoint' -ErrorAction SilentlyContinue
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$current) -and [IO.Path]::GetFullPath([string]$current).TrimEnd('\') -eq $mountPoint) {
+        return [pscustomobject]@{ Path = $mountPoint; RegistryPath = $registryPath; Action = 'AlreadyConfigured' }
+    }
+    if (Get-ChildItem -LiteralPath $mountPoint -Force -ErrorAction Stop | Select-Object -First 1) {
+        throw "O Google Drive exige um ponto de montagem vazio. Revise manualmente o conteudo de $mountPoint; nada foi removido."
+    }
+    if (-not (Test-Path -LiteralPath $registryPath)) { New-Item -Path $registryPath -Force | Out-Null }
+    New-ItemProperty -LiteralPath $registryPath -Name 'DefaultMountPoint' -PropertyType String -Value $mountPoint -Force | Out-Null
+    $confirmed = [string](Get-ItemPropertyValue -LiteralPath $registryPath -Name 'DefaultMountPoint' -ErrorAction Stop)
+    if ([IO.Path]::GetFullPath($confirmed).TrimEnd('\') -ne $mountPoint) { throw 'O ponto de montagem do Google Drive nao foi confirmado no perfil atual.' }
+    return [pscustomobject]@{ Path = $mountPoint; RegistryPath = $registryPath; Action = 'Configured' }
+}
+
 function Get-PcSetupEmptyStartAsset {
     param([Parameter(Mandatory)][hashtable]$Configuration, [Parameter(Mandatory)][string]$StateRoot)
 
@@ -202,7 +254,11 @@ $planActions = @(
     'Remover OneDrive e pacotes Appx configurados',
     'Preservar Vincular ao Celular e Cross Device'
 )
+if ($personalization.DisableWebSearch) { $planActions += 'Remover consultas, resultados e sugestoes da web da pesquisa do Windows' }
 if ($personalization.RedirectKnownFolders) { $planActions += "Redirecionar pastas pessoais para Storage.Paths.$($personalization.KnownFoldersPathKey), copiando o conteudo sem apagar a origem" }
+if ($personalization.RestoreKnownFoldersToProfile) { $planActions += 'Restaurar as pastas pessoais para o perfil padrao do Windows, copiando o conteudo sem apagar a origem antiga' }
+if ($personalization.ProfileLink.Enabled) { $planActions += "Criar a juncao $($personalization.ProfileLink.Name) para o perfil original do Windows" }
+if ($personalization.GoogleDrive.Enabled) { $planActions += "Configurar Google Drive em streaming usando Storage.Paths.$($personalization.GoogleDrive.PathKey)" }
 if ($wallpaperSource) { $planActions += "Aplicar plano de fundo: $wallpaperSource" }
 if ($mode -eq 'Plan') {
     foreach ($action in $planActions) { Write-Host "[PLANO] $action" }
@@ -221,7 +277,7 @@ if (-not [string]::IsNullOrWhiteSpace($WindowsApplyReport)) {
 if ([string]::IsNullOrWhiteSpace($DataRoot)) { throw 'A personalizacao exige a raiz de dados comprovada pela instalacao ou pelo launcher manual.' }
 $storage = @{ SystemRoot = [IO.Path]::GetPathRoot($env:SystemRoot); DataRoot = [IO.Path]::GetFullPath($DataRoot) }
 $configuredPaths = Get-PcSetupConfiguredPaths -Configuration $configuration -Storage $storage
-$knownFolderRoot = [string]$configuredPaths[[string]$personalization.KnownFoldersPathKey]
+$knownFolderRoot = if ($personalization.RedirectKnownFolders) { [string]$configuredPaths[[string]$personalization.KnownFoldersPathKey] } else { $null }
 if ($personalization.RedirectKnownFolders -and -not (Test-Path -LiteralPath $knownFolderRoot -PathType Container)) {
     throw "A pasta de dados configurada ainda nao existe: $knownFolderRoot. Execute INSTALAR.cmd antes da personalizacao manual."
 }
@@ -239,6 +295,14 @@ $actions += "Theme:$($personalization.Theme)"
 Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -Value $(if ($personalization.HideTaskbarSearch) { 0 } else { 2 })
 Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'ShowTaskViewButton' -Value $(if ($personalization.HideTaskView) { 0 } else { 1 })
 $actions += 'Taskbar'
+
+if ($personalization.DisableWebSearch) {
+    $searchPolicyPath = 'HKCU:\Software\Policies\Microsoft\Windows\Explorer'
+    Set-PcSetupDword -Path $searchPolicyPath -Name 'DisableSearchBoxSuggestions' -Value 1
+    $confirmedWebSearchPolicy = [int](Get-ItemPropertyValue -LiteralPath $searchPolicyPath -Name 'DisableSearchBoxSuggestions' -ErrorAction Stop)
+    if ($confirmedWebSearchPolicy -ne 1) { throw 'A desativacao das sugestoes web da pesquisa nao foi confirmada no perfil.' }
+    $actions += 'WebSearchDisabled'
+}
 
 $allAppsViewMode = @{ Category = 0; Grid = 1; List = 2 }[[string]$personalization.StartAllAppsView]
 Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Start' -Name 'AllAppsViewMode' -Value $allAppsViewMode
@@ -296,11 +360,11 @@ foreach ($pattern in @($personalization.RemoveAppxPackages)) {
 if ($removedAppx.Count -gt 0) { $actions += "AppxRemoved:$($removedAppx -join ',')" }
 
 $knownFolderResults = @()
-if ($personalization.RedirectKnownFolders) {
+if ($personalization.RedirectKnownFolders -or $personalization.RestoreKnownFoldersToProfile) {
     $folderIds = Get-PcSetupKnownFolderIds
     foreach ($folderName in @($personalization.KnownFolders)) {
         $sourcePath = Get-PcSetupKnownFolderPath -Id $folderIds[$folderName]
-        $targetPath = Join-Path $knownFolderRoot $folderName
+        $targetPath = if ($personalization.RedirectKnownFolders) { Join-Path $knownFolderRoot $folderName } else { Join-Path $env:USERPROFILE $folderName }
         New-Item -ItemType Directory -Path $targetPath -Force | Out-Null
         if ($personalization.CopyKnownFolderContent) { Copy-PcSetupKnownFolderContent -Source $sourcePath -Destination $targetPath }
         Set-PcSetupKnownFolderPath -Id $folderIds[$folderName] -Path $targetPath
@@ -310,7 +374,21 @@ if ($personalization.RedirectKnownFolders) {
         }
         $knownFolderResults += [pscustomobject]@{ Name = $folderName; Source = $sourcePath; Target = $targetPath; OriginalContentKept = $true }
     }
-    $actions += 'KnownFoldersRedirected'
+    $actions += $(if ($personalization.RedirectKnownFolders) { 'KnownFoldersRedirected' } else { 'KnownFoldersRestoredToWindowsProfile' })
+}
+
+$profileLinkResult = $null
+if ($personalization.ProfileLink.Enabled) {
+    $profileLinkParent = [string]$configuredPaths[[string]$personalization.ProfileLink.PathKey]
+    $profileLinkResult = Set-PcSetupProfileJunction -ParentPath $profileLinkParent -Name ([string]$personalization.ProfileLink.Name) -TargetPath $env:USERPROFILE
+    $actions += "ProfileLink:$($profileLinkResult.Action)"
+}
+
+$googleDriveResult = $null
+if ($personalization.GoogleDrive.Enabled) {
+    $googleDrivePath = [string]$configuredPaths[[string]$personalization.GoogleDrive.PathKey]
+    $googleDriveResult = Set-PcSetupGoogleDriveStreamingMountPoint -Path $googleDrivePath
+    $actions += "GoogleDriveStreaming:$($googleDriveResult.Action)"
 }
 
 $wallpaperTarget = $null
@@ -346,6 +424,8 @@ $result = [ordered]@{
     RemovedAppx        = $removedAppx
     PreservedAppx      = @($personalization.PreserveAppxPackages)
     KnownFolders       = $knownFolderResults
+    ProfileLink        = $profileLinkResult
+    GoogleDrive        = $googleDriveResult
     Wallpaper          = $wallpaperTarget
     DataRoot           = [IO.Path]::GetFullPath($DataRoot)
     WindowsApplyReport = if ($applyReport) { $WindowsApplyReport } else { $null }

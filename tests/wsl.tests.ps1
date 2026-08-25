@@ -172,7 +172,7 @@ $wslModule = Get-Content -LiteralPath (Join-Path $root 'wsl\PcSetup.Wsl.psm1') -
 Assert-True ($wslModule -match 'Get-PcSetupWslInstalledState' -and $bootstrapPowerShell -match 'InstalledState') 'Os relatorios WSL devem registrar as versoes realmente instaladas.'
 
 $agentLauncher = Get-Content -LiteralPath (Join-Path $root 'scripts\Start-Agent.ps1') -Raw
-Assert-True ($agentLauncher -match '--agent-state' -and $agentLauncher -match '--no-docker' -and $agentLauncher -match '--no-inherit-env' -and $agentLauncher -match 'canonicalize-existing' -and $agentLauncher -match 'Test-SafeAgentProjectPath') 'O launcher deve aplicar capacidades explicitas e recusar workspaces amplos ou nao canonicos.'
+Assert-True ($agentLauncher -match '--no-agent-state' -and $agentLauncher -match '\.codex' -and $agentLauncher -match '--no-docker' -and $agentLauncher -match '--no-inherit-env' -and $agentLauncher -match 'canonicalize-existing' -and $agentLauncher -match 'Test-SafeAgentProjectPath') 'O launcher deve montar somente o estado explicito do Codex, aplicar capacidades e recusar workspaces amplos.'
 Assert-True ($agentLauncher -match 'systemctl start' -and $agentLauncher -match 'ai-memory status' -and $agentLauncher -match '--rw-map' -and $agentLauncher -match '\.local/share/ai-memory') 'O launcher deve iniciar a memoria, validar sua saude e persistir somente o diretorio necessario.'
 
 Write-Host 'PASS: WSL convergente com usuario agent, ai-jail e ai-memory atuais validados.' -ForegroundColor Green

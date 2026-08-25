@@ -13,7 +13,7 @@ Revise `config/machine.psd1` e execute `INSTALAR.cmd`. Os arquivos `.cmd` abaixo
 | `PERSONALIZAR.cmd` | Personalização | Mostra o plano, pede confirmação, cria um ponto de restauração e reaplica somente a aparência, o menu e as pastas pessoais. |
 | `DEBLOAT.cmd` | Debloat independente | Mostra o plano, pede confirmação, cria um ponto de restauração e aplica o Win11Debloat configurado. |
 | `VERIFICAR.cmd` | Verificação geral | Confere o estado prometido pelo perfil e gera o relatório técnico sem aplicar mudanças. |
-| `AGENTE.cmd` | Agente de IA | Abre o agente configurado no WSL, isolado pelo `ai-jail`, para o projeto selecionado. |
+| `AGENTE.cmd` | Agente de IA | Abre o Codex no projeto selecionado usando `ai-jail`; o modo Normal também usa `ai-memory`. |
 | `BACKUP.cmd` | Backup local | Cria um snapshot local com manifesto e hashes, sem apagar arquivos automaticamente. |
 | `VERIFICAR-BACKUP.cmd` | Verificação de backup | Confere o manifesto e os hashes de um snapshot existente. |
 | `EXPORTAR-BACKUP.cmd` | Cópia externa | Copia um backup local verificado para o destino externo escolhido. |
@@ -135,13 +135,14 @@ O perfil padrão usa:
 ```powershell
 SecondaryDiskPolicy    = 'Ask'
 OnMultipleCandidates  = 'Stop'
+DedicatedVolumeSubdirectory = ''
 SingleDiskFallbackRoot = '{SystemRoot}\Dados'
 AllowRemovableVolumes  = $false
 ```
 
 Isso significa:
 
-- um único volume NTFS saudável em um segundo disco fixo: pergunta se deve usá-lo;
+- um único volume NTFS saudável em um segundo disco fixo: pergunta se deve usá-lo e, por padrão, usa a raiz do volume;
 - nenhum segundo disco: usa `Dados` no volume do Windows;
 - segundo disco sem volume NTFS utilizável: interrompe e pede preparação no Gerenciamento de Disco;
 - vários volumes candidatos: interrompe para não escolher por adivinhação;
@@ -149,40 +150,49 @@ Isso significa:
 
 Modelo, tamanho, rótulo, barramento e letra não são fixados. A raiz escolhida no plano precisa ser a mesma na aplicação.
 
+`DedicatedVolumeSubdirectory = ''` produz, por exemplo, `D:\Felipe`; altere para `'Dados'` se quiser `D:\Dados\Felipe`. O fallback de um disco permanece `C:\Dados\Felipe`.
+
 Para forçar uma máquina com somente um disco, use como base [`config/examples/machine-one-disk.psd1`](config/examples/machine-one-disk.psd1).
 
 ## Diretórios e permissões
 
-Os nomes abaixo são relativos à raiz de dados escolhida:
+Com um segundo disco escolhido, a estrutura padrão usa diretamente a raiz do volume:
 
 ```text
-Apps
-Games
-Dev
-Data\<usuario principal>
-Shared
-VMs
-Containers
-Backups
+D:\
+├── Felipe\
+│   ├── Apps
+│   ├── Containers
+│   ├── Data -> C:\Users\Felipe
+│   ├── Dev
+│   ├── Drive
+│   ├── Games
+│   └── VMs
+├── Backups
+└── Shared
 ```
+
+Em uma máquina de um disco, a mesma árvore fica sob `C:\Dados`. `Data` é uma junção para o perfil Windows original; Área de Trabalho, Documentos, Downloads, Música, Imagens, Vídeos e `AppData` continuam em `C:\Users\Felipe`.
 
 As ACLs protegidas são:
 
-- `Dev`: usuário principal com modificação;
-- dados pessoais: somente usuário principal, SYSTEM e Administradores.
+- a pasta do usuário: somente usuário principal, SYSTEM e Administradores;
 - `Backups`: somente usuário principal, SYSTEM e Administradores.
+- `Shared`: usuário principal e conta pública com modificação; SYSTEM e Administradores com controle total.
 
 O agente não usa uma pasta Windows dedicada. Ele roda como o usuário Linux `agent`, sem `sudo`, dentro do WSL e do `ai-jail`. O workspace Linux compartilhado fica em `/home/agent/Dev`; `felipe` e `agent` pertencem ao grupo `pcsetup-agent`.
 
-Quando a raiz de dados escolhida for `D:\`, a pasta Windows `D:\Dev` aparece no WSL como `/mnt/d/Dev`. Use-a para projetos manipulados principalmente por programas Windows. Para Git, dependências, builds e containers executados principalmente no Linux, prefira `/home/felipe/Dev` ou `/home/agent/Dev`, que oferecem melhor desempenho no WSL. Em uma máquina de um disco, o caminho Windows configurado passa a ser `C:\Dados\Dev`, acessível como `/mnt/c/Dados/Dev`.
+Quando a raiz de dados escolhida for `D:\`, a pasta Windows `D:\Felipe\Dev` aparece no WSL como `/mnt/d/Felipe/Dev`. Use-a para projetos manipulados principalmente por programas Windows. Para Git, dependências, builds e containers executados principalmente no Linux, prefira `/home/felipe/Dev` ou `/home/agent/Dev`, que oferecem melhor desempenho no WSL. Em uma máquina de um disco, o caminho Windows configurado passa a ser `C:\Dados\Felipe\Dev`, acessível como `/mnt/c/Dados/Felipe/Dev`.
 
 Os nomes das contas são configuráveis. Consulte os papéis e limites de cada conta em [`usuarios/README.md`](usuarios/README.md).
 
 Antes da alteração, o script exporta as ACLs para `%ProgramData%\pc-setup\acl-backups`. Se a própria etapa de ACL falhar, ela tenta restaurar os backups daquela etapa. Falhas posteriores não provocam rollback automático das ACLs.
 
-Perfis do Windows, `AppData`, `ProgramData` e componentes do sistema não são movidos.
+Perfis do Windows, `AppData`, `ProgramData` e componentes do sistema não são movidos. A pasta `Drive` recebe o ponto de montagem do Google Drive em streaming; login e credenciais permanecem manuais, e o cache continua no local padrão do cliente.
 
 O Hyper-V recebe automaticamente `VMs` como destino padrão para novas máquinas e `VMs\Virtual Hard Disks` para novos VHDs. Docker Desktop, Steam e Epic exigem confirmação nas respectivas interfaces; o plano, a aplicação e o verificador mostram a pasta e mantêm essa pendência visível. O projeto não altera arquivos internos não documentados desses aplicativos.
+
+`Apps` fica reservado para aplicativos portáteis, instaladores e dados que você escolher guardar ali. Pacotes instalados pelo Winget continuam nos caminhos oficiais de cada fabricante. No Docker, `Containers` é o destino sugerido para o arquivo de disco que reúne imagens, containers e volumes; Steam e Epic usam `Games` como biblioteca manual.
 
 ## Programas
 
@@ -204,7 +214,7 @@ O padrão `Versions.Mode = 'Latest'` continua buscando versões atuais. Depois d
 
 ## Backup de dados
 
-`BACKUP.cmd` copia `PersonalData` e `Development` para um snapshot datado dentro de `Backups`, sem excluir snapshots anteriores, e cria um manifesto SHA-256. Essa cópia local é uma área de preparação e recuperação rápida, não um backup independente enquanto estiver no mesmo disco dos dados.
+`BACKUP.cmd` copia `Development` e as pastas padrão do perfil Windows listadas em `Backup.UserProfileFolders` para um snapshot datado dentro de `Backups`, sem seguir junções, sem excluir snapshots anteriores e com manifesto SHA-256. Ele não copia programas, jogos, contêineres nem VMs; preserva os inventários JSON do Winget e das versões validadas para permitir reinstalação sem guardar binários. Essa cópia local é uma área de preparação e recuperação rápida, não um backup independente enquanto estiver no mesmo disco dos dados.
 
 Com a unidade externa conectada, `EXPORTAR-BACKUP.cmd` copia o snapshot mais recente para `pc-setup-backups` no destino informado e verifica novamente os hashes. `VERIFICAR-BACKUP.cmd` confere o snapshot local mais recente. `TESTAR-RESTAURACAO.cmd` copia todo o snapshot para a pasta temporária configurada, valida o manifesto e remove somente essa cópia depois do sucesso; o snapshot nunca é apagado. `Backup.ExternalDestination` pode guardar um caminho de disco externo ou de pasta sincronizada; autenticação e credenciais continuam fora do repositório.
 
@@ -214,7 +224,7 @@ Se o Winget não conseguir abrir a fonte padrão ou retornar `0x80070005` ou `0x
 
 O bootstrap principal configura os recursos globais do WSL. Na instalação inicial, `INSTALAR.cmd` aplica dois perfis na mesma distribuição: primeiro `DailyUser`, depois `Agent`. Em manutenções posteriores, `ATUALIZAR.cmd` reconcilia os mesmos perfis. Ambos devem ser executados na conta Windows diária, e o perfil do agente não troca o usuário padrão da distribuição.
 
-Os comandos, perfis convergentes e a decisão entre `/mnt/d/Dev` e o filesystem Linux estão em [`wsl/README.md`](wsl/README.md). Os relatórios WSL incluem as versões APT, do harness, do `ai-jail` e do `ai-memory` realmente encontradas no manifesto instalado.
+Os comandos, perfis convergentes e a decisão entre `/mnt/d/Felipe/Dev` e o filesystem Linux estão em [`wsl/README.md`](wsl/README.md). Os relatórios WSL incluem as versões APT, do harness, do `ai-jail` e do `ai-memory` realmente encontradas no manifesto instalado.
 
 O perfil padrão instala a versão atual do pacote NPM `@openai/codex` para o usuário Linux `agent`. A autenticação é feita manualmente uma vez e permanece no estado explicitamente liberado do agente. O `ai-memory` roda como o mesmo usuário, em serviço local protegido por token, registra MCP e hooks do Codex e usa a raiz Git como identidade padrão do projeto. `AGENTE.cmd` solicita o modo e um diretório, usando por padrão `ai-jail ai-memory run codex`; a opção de revisão deixa o projeto somente leitura. Antes de abrir, o preflight informa caminhos sensíveis que serão negados. Consulte o modelo de segurança, a operação da memória e as limitações em [`docs/AGENTE-IA.md`](docs/AGENTE-IA.md).
 
@@ -254,7 +264,7 @@ Procedimentos para aplicação incompleta, ACLs, WSL, checkpoints e restauraçã
 
 `INSTALAR.cmd` aplica a personalização habilitada; `ATUALIZAR.cmd` pergunta se ela deve ser reaplicada; `PERSONALIZAR.cmd` executa somente essa etapa. O perfil padrão usa tema escuro, oculta pesquisa e Visão de Tarefas, limpa os fixados do Iniciar, usa a visualização de aplicativos por categoria, deixa somente Configurações ao lado do botão de energia, impede o Edge em segundo plano, remove OneDrive e LinkedIn e preserva Vincular ao Celular/Cross Device.
 
-Área de Trabalho, Documentos, Downloads, Música, Imagens e Vídeos passam a usar subpastas de `Storage.Paths.PersonalData`. O conteúdo existente é copiado antes do redirecionamento e a origem não é apagada automaticamente. Uma imagem local pode ser colocada em `config\wallpapers` e indicada em `Personalization.WallpaperPath`; vazio mantém o plano de fundo atual. Veja [`docs/PERSONALIZACAO.md`](docs/PERSONALIZACAO.md).
+Área de Trabalho, Documentos, Downloads, Música, Imagens e Vídeos permanecem no perfil padrão do Windows. Se uma versão anterior do projeto as redirecionou, o conteúdo é copiado de volta sem apagar a origem antiga. A etapa também cria a junção `Data` para o perfil original e configura `Drive` como ponto de montagem streaming do Google Drive. Uma imagem local pode ser colocada em `config\wallpapers` e indicada em `Personalization.WallpaperPath`; vazio mantém o plano de fundo atual. Veja [`docs/PERSONALIZACAO.md`](docs/PERSONALIZACAO.md).
 
 ### Debloat
 

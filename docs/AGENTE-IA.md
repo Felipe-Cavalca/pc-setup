@@ -1,5 +1,27 @@
 # Agente de IA isolado
 
+## Em uma frase
+
+`AGENTE.cmd` abre o Codex dentro do WSL como o usuário Linux restrito `agent`, limitado ao projeto escolhido pelo `ai-jail`.
+
+Ele não cria uma conta Windows, não cria uma VM, não instala o computador e não é executado automaticamente. Ao dar dois cliques, o launcher pergunta o modo e a pasta do projeto; depois abre o agente no terminal. Se você quiser apenas usar o Codex comum fora desse isolamento, não precisa executar esse arquivo.
+
+`AGENTE.cmd` é o arquivo executável da raiz. Este `docs/AGENTE-IA.md` é somente a explicação de segurança e operação; abrir o Markdown não altera a máquina.
+
+## Quando e como usar
+
+Use `AGENTE.cmd` sempre que quiser que o Codex trabalhe com o isolamento e a memória definidos por este projeto. O Codex instalado diretamente no Windows ou aberto por outro launcher continua funcionando, mas esse outro fluxo não recebe automaticamente as fronteiras do `ai-jail` nem a continuidade gerenciada do `ai-memory`.
+
+Fluxo normal:
+
+1. depois de instalar ou atualizar o repositório, execute `ATUALIZAR.cmd` uma vez;
+2. abra `AGENTE.cmd` na conta Windows diária;
+3. pressione Enter para escolher o modo Normal;
+4. informe a pasta completa de um único projeto, por exemplo `D:\Felipe\Dev\meu-projeto`;
+5. no primeiro uso, conclua o login solicitado pelo Codex. O estado fica no home restrito de `agent` e é reutilizado nas próximas execuções.
+
+O launcher testa `codex --version` dentro da mesma jaula antes da sessão. Ele expõe em leitura somente o escopo NPM controlado do harness (`@openai` no padrão), cobrindo o pacote principal e seu binário Linux opcional sem liberar o restante de `~/.local`. Se o pacote não estiver completo, mostra um erro curto e orienta executar `ATUALIZAR.cmd`, em vez de deixar apenas o stack trace do Node.
+
 O projeto adota o princípio de autonomia com limites: o agente recebe acesso suficiente para trabalhar em um projeto, sem receber acesso administrativo ao Windows nem acesso amplo aos arquivos pessoais.
 
 ## Arquitetura padrão
@@ -20,7 +42,7 @@ Não é criada uma conta Windows para a IA. Isso evita troca de sessão, uma seg
 
 O usuário diário pode chamar o agente e acessar `/home/agent/Dev`. Somente esse workspace é compartilhado pelo grupo Linux `pcsetup-agent`; o home e os dados pessoais do usuário diário não são compartilhados por esse mecanismo.
 
-O projeto selecionado em `AGENTE.cmd` é a unidade de permissão. O `ai-jail` recebe esse diretório, não a raiz de `D:\Dev`, `/mnt/d` ou um home inteiro. `Agent.Workspace.DefaultPath` pode preencher a escolha, mas não amplia o acesso.
+O projeto selecionado em `AGENTE.cmd` é a unidade de permissão. O `ai-jail` recebe esse diretório, não a raiz de `D:\Felipe\Dev`, `/mnt/d` ou um home inteiro. `Agent.Workspace.DefaultPath` pode preencher a escolha, mas não amplia o acesso.
 
 O servidor do `ai-memory` roda fora do sandbox, como serviço Linux do usuário `agent`, mas não recebe privilégios administrativos. Ele escuta somente no loopback, exige token e grava apenas em `~/.local/share/ai-memory`. No modo padrão, o cliente `ai-memory run` e o Codex ficam dentro do mesmo `ai-jail`; o diretório local da memória recebe escrita explícita para logs, fila durável dos hooks e continuidade do workstream.
 
@@ -59,9 +81,9 @@ O launcher passa opções explícitas ao `ai-jail`, usa home privado, mantém La
 
 `AGENTE.cmd` mostra as opções na hora; não é necessário memorizar parâmetros:
 
-1. **Normal**: padrão recomendado, com projeto gravável e `ai-jail ai-memory run codex` para manter um workstream gerenciado.
-2. **Revisão**: usa `--lockdown`, deixando o projeto somente leitura. Rede e estado de login continuam habilitados porque o Codex é remoto; por isso, esse modo reduz escrita acidental, mas não torna conteúdo hostil seguro.
-3. **Direto**: compatibilidade com o fluxo anterior, executando o Codex diretamente no `ai-jail`; MCP e hooks do ai-memory continuam instalados.
+1. **Normal**: padrão recomendado. Usa `ai-jail`, inicia o `ai-memory` e executa `ai-memory run codex`; o projeto fica gravável.
+2. **Revisão**: usa `ai-jail --lockdown` e deixa o projeto somente leitura. Rede e estado de login continuam habilitados porque o Codex é remoto; a continuidade gerenciada não é o objetivo desse modo.
+3. **Direto**: executa o Codex diretamente no `ai-jail`, sem o wrapper `ai-memory run`. Serve principalmente para diagnóstico e compatibilidade; MCP e hooks já instalados podem continuar disponíveis.
 
 `Agent.RestrictedMode.Lockdown = $true` força o comportamento de revisão independentemente da escolha. Para malware, instaladores desconhecidos ou repositórios deliberadamente hostis, use uma VM descartável sem credenciais compartilhadas.
 

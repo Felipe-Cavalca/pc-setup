@@ -32,6 +32,11 @@ Assert-True (-not $config.Agent.VirtualMachine.Enabled) 'Nenhuma VM deve ser cri
 Assert-True (@($config.Security.HyperVAdministratorAccounts) -contains 'DailyUser') 'O usuario diario deve administrar o Hyper-V.'
 Assert-True ($config.Accounts.Public.Enabled -and $config.Accounts.Public.Role -eq 'Standard') 'Conta Publico deve estar habilitada sem privilegio administrativo.'
 Assert-True ($config.Backup.Enabled -and $config.Backup.VerifyHashes -and $config.Backup.NoAutomaticDeletion) 'O backup local deve verificar hashes e nunca apagar automaticamente.'
+Assert-True ([string]::IsNullOrEmpty([string]$config.Storage.Data.DedicatedVolumeSubdirectory)) 'O segundo disco deve usar a raiz por padrao.'
+Assert-True ($config.Storage.Paths.UserRoot -eq '{PrimaryUser}' -and $config.Storage.Paths.Development -eq '{PrimaryUser}\Dev') 'A arvore privada deve ficar dentro da pasta do usuario.'
+Assert-True ($config.Storage.Paths.Backups -eq 'Backups' -and $config.Storage.Paths.Shared -eq 'Shared') 'Backups e Shared devem permanecer globais.'
+Assert-True (@($config.Backup.UserProfileFolders).Count -eq 6) 'O backup deve incluir as pastas pessoais mantidas no perfil Windows.'
+Assert-True ($config.Backup.IncludeSetupInventory) 'O backup deve incluir o inventario de reinstalacao por padrao.'
 Assert-True ($config.Versions.Mode -eq 'Latest' -and $config.Versions.CaptureKnownGood) 'O perfil deve buscar versoes atuais e capturar o estado conhecido como bom.'
 
 $debloatScript = Get-Content -Raw -LiteralPath (Join-Path $root 'scripts\50-debloat-akita.ps1')

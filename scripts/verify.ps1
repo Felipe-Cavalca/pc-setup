@@ -158,10 +158,13 @@ if ($paths) {
         Add-Check -Status $(if (Test-Path -LiteralPath $paths[$key] -PathType Container) { 'PASS' } else { 'FAIL' }) -Name "Diretorio $key" -Detail $paths[$key]
     }
 
-    $developmentGrants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'Modify' })
+    $sharedGrants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'Modify' })
+    if ($configuration.Accounts.Public.Enabled) {
+        $sharedGrants += @{ Name = [string]$configuration.Accounts.Public.Name; Rights = 'Modify' }
+    }
     $aclExpectations = @(
-        @{ Key = 'Development'; Grants = $developmentGrants },
-        @{ Key = 'PersonalData'; Grants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'FullControl' }) }
+        @{ Key = 'UserRoot'; Grants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'FullControl' }) },
+        @{ Key = 'Shared'; Grants = $sharedGrants }
     )
     if ($configuration.Backup.Enabled) {
         $aclExpectations += @{ Key = [string]$configuration.Backup.StagingPathKey; Grants = @(@{ Name = [string]$configuration.Accounts.DailyUser.Name; Rights = 'FullControl' }) }
@@ -355,7 +358,17 @@ elseif ($configuration.Packages.Enabled) {
 }
 
 if ($configuration.Personalization.Enabled) {
-    Add-Check -Status 'INFO' -Name 'Personalizacao' -Detail 'aplicada e validada sem elevacao na fase da conta diaria; consulte o relatorio user-profile em LOCALAPPDATA'
+    if ($configuration.Personalization.DisableWebSearch) {
+        try {
+            $searchPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search'
+            $disableWebSearch = [int](Get-ItemPropertyValue -LiteralPath $searchPolicyPath -Name 'DisableWebSearch' -ErrorAction Stop)
+            $connectedSearchUseWeb = [int](Get-ItemPropertyValue -LiteralPath $searchPolicyPath -Name 'ConnectedSearchUseWeb' -ErrorAction Stop)
+            $searchPoliciesOk = $disableWebSearch -eq 1 -and $connectedSearchUseWeb -eq 0
+            Add-Check -Status $(if ($searchPoliciesOk) { 'PASS' } else { 'FAIL' }) -Name 'Pesquisa web do Windows' -Detail "DisableWebSearch=$disableWebSearch; ConnectedSearchUseWeb=$connectedSearchUseWeb"
+        }
+        catch { Add-Check -Status 'FAIL' -Name 'Pesquisa web do Windows' -Detail $_.Exception.Message }
+    }
+    Add-Check -Status 'INFO' -Name 'Personalizacao do perfil' -Detail 'as configuracoes HKCU sao aplicadas e validadas na fase da conta diaria; consulte o relatorio user-profile em LOCALAPPDATA'
 }
 else {
     Add-Check -Status 'INFO' -Name 'Personalizacao' -Detail 'nao solicitada pela configuracao'

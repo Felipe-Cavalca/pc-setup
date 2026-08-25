@@ -29,6 +29,47 @@ $storage = Resolve-PcSetupStorage -Configuration $configuration -SelectedDataRoo
 $paths = Get-PcSetupConfiguredPaths -Configuration $configuration -Storage $storage
 $stagingRoot = [IO.Path]::GetFullPath([string]$paths[[string]$configuration.Backup.StagingPathKey]).TrimEnd('\')
 
+function Get-ConfiguredBackupSources {
+    $sources = @()
+    foreach ($sourceKey in @($configuration.Backup.SourcePathKeys)) {
+        $key = [string]$sourceKey
+        $sources += [pscustomobject]@{
+            Key            = $key
+            Path           = [string]$paths[$key]
+            TargetRelative = $key
+            Type           = 'StoragePath'
+            Kind           = 'Directory'
+            Required       = $true
+        }
+    }
+    foreach ($folderName in @($configuration.Backup.UserProfileFolders)) {
+        $sources += [pscustomobject]@{
+            Key            = "WindowsProfile/$folderName"
+            Path           = Join-Path $env:USERPROFILE ([string]$folderName)
+            TargetRelative = Join-Path 'WindowsProfile' ([string]$folderName)
+            Type           = 'WindowsProfile'
+            Kind           = 'Directory'
+            Required       = $true
+        }
+    }
+    if ($configuration.Backup.IncludeSetupInventory) {
+        foreach ($inventory in @(
+            @{ Key = 'WingetInventory'; RuntimeKey = 'WingetInventoryPath'; FileName = 'winget-installed.json' },
+            @{ Key = 'KnownGoodVersions'; RuntimeKey = 'KnownGoodVersionPath'; FileName = 'versions-known-good.json' }
+        )) {
+            $sources += [pscustomobject]@{
+                Key            = [string]$inventory.Key
+                Path           = Get-PcSetupRuntimePath -Configuration $configuration -Key ([string]$inventory.RuntimeKey)
+                TargetRelative = Join-Path 'SetupInventory' ([string]$inventory.FileName)
+                Type           = 'SetupInventory'
+                Kind           = 'File'
+                Required       = $false
+            }
+        }
+    }
+    return $sources
+}
+
 function Get-LatestSnapshot {
     $item = Get-ChildItem -LiteralPath $stagingRoot -Directory -Filter 'backup-*' -ErrorAction SilentlyContinue |
         Sort-Object Name -Descending | Select-Object -First 1
@@ -39,20 +80,35 @@ function Get-LatestSnapshot {
 if ($Action -eq 'Create') {
     $snapshotName = 'backup-' + (Get-Date -Format 'yyyy-MM-dd_HHmmss')
     $snapshot = Join-Path $stagingRoot $snapshotName
+    $configuredSources = @(Get-ConfiguredBackupSources)
     if ($Plan) {
-        $sources = @($configuration.Backup.SourcePathKeys | ForEach-Object { [pscustomobject]@{ Key = [string]$_; Path = [string]$paths[[string]$_] } })
-        [pscustomobject]@{ Action = 'Create'; SnapshotPath = $snapshot; Sources = $sources; Hashes = [bool]$configuration.Backup.VerifyHashes; AutomaticDeletion = $false }
+        [pscustomobject]@{ Action = 'Create'; SnapshotPath = $snapshot; Sources = $configuredSources; Hashes = [bool]$configuration.Backup.VerifyHashes; AutomaticDeletion = $false }
         exit 0
     }
     if (Test-Path -LiteralPath $snapshot) { throw "O snapshot ja existe: $snapshot" }
     New-Item -ItemType Directory -Path $snapshot -Force | Out-Null
     $sources = @()
     try {
-        foreach ($sourceKey in @($configuration.Backup.SourcePathKeys)) {
-            $source = [string]$paths[[string]$sourceKey]
-            $target = Join-Path $snapshot ([string]$sourceKey)
-            $copyExitCode = Invoke-PcSetupRobocopy -Source $source -Destination $target
-            $sources += [pscustomobject]@{ Key = [string]$sourceKey; OriginalPath = $source; CopyExitCode = $copyExitCode }
+        foreach ($configuredSource in $configuredSources) {
+            $source = [string]$configuredSource.Path
+            $expectedPathType = if ([string]$configuredSource.Kind -eq 'File') { 'Leaf' } else { 'Container' }
+            if (-not (Test-Path -LiteralPath $source -PathType $expectedPathType)) {
+                if ([bool]$configuredSource.Required) { throw "Origem de backup ausente: $source" }
+                Write-Warning "Inventario opcional ainda nao existe e foi ignorado: $source"
+                $sources += [pscustomobject]@{ Key = [string]$configuredSource.Key; Type = [string]$configuredSource.Type; OriginalPath = $source; Status = 'MissingOptional' }
+                continue
+            }
+            $target = Join-Path $snapshot ([string]$configuredSource.TargetRelative)
+            if ([string]$configuredSource.Kind -eq 'File') {
+                $targetParent = Split-Path -Parent $target
+                New-Item -ItemType Directory -Path $targetParent -Force | Out-Null
+                Copy-Item -LiteralPath $source -Destination $target -Force
+                $sources += [pscustomobject]@{ Key = [string]$configuredSource.Key; Type = [string]$configuredSource.Type; OriginalPath = $source; Status = 'Copied' }
+            }
+            else {
+                $copyExitCode = Invoke-PcSetupRobocopy -Source $source -Destination $target
+                $sources += [pscustomobject]@{ Key = [string]$configuredSource.Key; Type = [string]$configuredSource.Type; OriginalPath = $source; CopyExitCode = $copyExitCode; Status = 'Copied' }
+            }
         }
         $files = if ($configuration.Backup.VerifyHashes) { @(Get-PcSetupBackupFileRecords -SnapshotPath $snapshot) } else { @() }
         $manifest = [ordered]@{

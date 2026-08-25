@@ -34,12 +34,12 @@ foreach ($file in $markdownFiles) {
 Assert-True ($brokenLinks.Count -eq 0) "Links relativos quebrados: $($brokenLinks -join '; ')"
 
 $requiredDocumentation = @{
-    'README.md'                           = @('## TL;DR', 'DEBLOAT.cmd', 'VERIFICAR.cmd', 'TESTAR.cmd', 'ai-memory', '/mnt/d/Dev', '0x80072ee7', 'PLANO-PC-SETUP.html', 'TESTAR-INTEGRACAO.cmd', 'execution-*.jsonl')
+    'README.md'                           = @('## TL;DR', 'DEBLOAT.cmd', 'VERIFICAR.cmd', 'TESTAR.cmd', 'ai-memory', '/mnt/d/Felipe/Dev', '0x80072ee7', 'PLANO-PC-SETUP.html', 'TESTAR-INTEGRACAO.cmd', 'execution-*.jsonl')
     'config\README.md'                    = @('Agent.Memory', 'ProjectStrategy', 'AI_MEMORY_AUTH_TOKEN', 'PlanSummary', 'ExecutionLogEnabled')
-    'docs\AGENTE-IA.md'                   = @('finalize-session', 'bootstrap --dry-run', '127.0.0.1')
+    'docs\AGENTE-IA.md'                   = @('AGENTE.cmd', 'finalize-session', 'bootstrap --dry-run', '127.0.0.1')
     'docs\RECUPERACAO.md'                 = @('0x80072ee7', 'InternetOpenUrl() failed', '[REDACTED]')
     'SECURITY.md'                         = @('Memória e dados sensíveis', 'ai-memory')
-    'wsl\README.md'                       = @('AGENTE.cmd', 'ai-memory', '/mnt/d/Dev', 'filesystem Linux')
+    'wsl\README.md'                       = @('AGENTE.cmd', 'ai-memory', '/mnt/d/Felipe/Dev', 'filesystem Linux')
     'imagem-windows\docs\TESTE-EM-VM.md' = @('ai-memory', 'MCP', 'TESTAR-INTEGRACAO.cmd')
 }
 foreach ($relativePath in $requiredDocumentation.Keys) {

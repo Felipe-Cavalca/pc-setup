@@ -27,6 +27,8 @@ O perfil não instala dotfiles, temas ou aliases pessoais. VS Code Settings Sync
 
 `AGENTE.cmd` pode ser aberto pela conta Windows diária. Ele mostra os modos disponíveis, solicita o caminho de um projeto e executa `Agent.DefaultCommand` como o usuário Linux `agent`, dentro do `ai-jail`. Com `Workspace.DefaultPath = ''`, essa escolha ocorre em toda execução. Enter escolhe o modo normal gerenciado por `ai-memory run`; também há revisão somente leitura e compatibilidade direta.
 
+No `private-home`, o launcher usa o ponto de entrada canônico e mapeia em leitura somente o escopo NPM do harness. Isso mantém disponíveis o `package.json`, o pacote principal e o binário nativo opcional exigidos pelo Codex sem expor o restante de `~/.local`. Antes de abrir a sessão, um preflight executa `codex --version` dentro da jaula.
+
 O perfil padrão:
 
 - libera rede e o estado de autenticação específico do agente;
@@ -55,7 +57,7 @@ O segundo comando é manual porque o Codex ainda não oferece um evento confiáv
 Para executar manualmente outro comando instalado, use o launcher da raiz, que repassa os parâmetros ao fluxo interno:
 
 ```powershell
-.\AGENTE.cmd -ProjectPath D:\Dev\projeto -Command claude
+.\AGENTE.cmd -ProjectPath D:\Felipe\Dev\projeto -Command claude
 ```
 
 ## Onde guardar projetos
@@ -68,7 +70,7 @@ O workspace do agente pode ser aberto no Explorer por:
 \\wsl$\Ubuntu-24.04\home\agent\Dev
 ```
 
-Os discos fixos do Windows são montados automaticamente no WSL. Quando o perfil escolhe `D:\` como raiz de dados, `D:\Dev` aparece como `/mnt/d/Dev`; no fallback de um disco, `C:\Dados\Dev` aparece como `/mnt/c/Dados/Dev`.
+Os discos fixos do Windows são montados automaticamente no WSL. Quando o perfil escolhe `D:\` como raiz de dados, `D:\Felipe\Dev` aparece como `/mnt/d/Felipe/Dev`; no fallback de um disco, `C:\Dados\Felipe\Dev` aparece como `/mnt/c/Dados/Felipe/Dev`.
 
 Use esses caminhos sob `/mnt` quando o checkout precisar ser manipulado principalmente por programas Windows, IDEs nativas ou ferramentas que dependam de caminhos Windows. A integração é conveniente, mas costuma ser mais lenta para builds Linux e pode expor diferenças de permissões e finais de linha.
 

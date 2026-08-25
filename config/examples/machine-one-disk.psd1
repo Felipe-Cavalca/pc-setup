@@ -38,19 +38,21 @@
             Mode                   = 'DirectoryOnSystemVolume'
             SecondaryDiskPolicy    = 'Ignore'
             OnMultipleCandidates   = 'Stop'
+            DedicatedVolumeSubdirectory = ''
             Root                   = '{SystemRoot}\Dados'
             AllowRemovableVolumes  = $false
             RequireHealthy         = $true
         }
 
         Paths = @{
-            Apps         = 'Apps'
-            Games        = 'Games'
-            Development  = 'Dev'
-            PersonalData = 'Data\{PrimaryUser}'
+            UserRoot     = '{PrimaryUser}'
+            Apps         = '{PrimaryUser}\Apps'
+            Games        = '{PrimaryUser}\Games'
+            Development  = '{PrimaryUser}\Dev'
+            Drive        = '{PrimaryUser}\Drive'
             Shared       = 'Shared'
-            VirtualMachines = 'VMs'
-            Containers   = 'Containers'
+            VirtualMachines = '{PrimaryUser}\VMs'
+            Containers   = '{PrimaryUser}\Containers'
             Backups      = 'Backups'
         }
 
@@ -65,7 +67,9 @@
     Backup = @{
         Enabled              = $false
         StagingPathKey       = 'Backups'
-        SourcePathKeys       = @('PersonalData', 'Development')
+        SourcePathKeys       = @('Development')
+        UserProfileFolders   = @('Desktop', 'Documents', 'Downloads', 'Music', 'Pictures', 'Videos')
+        IncludeSetupInventory = $true
         ExternalDestination  = ''
         VerifyHashes         = $true
         NoAutomaticDeletion  = $true
@@ -234,6 +238,7 @@
         Theme                    = 'Dark'
         HideTaskbarSearch        = $true
         HideTaskView             = $true
+        DisableWebSearch         = $true
         ClearStartPins           = $true
         StartAllAppsView         = 'Category'
         StartPowerMenuFolders    = @('Settings')
@@ -241,10 +246,21 @@
         RemoveOneDrive           = $true
         RemoveAppxPackages       = @('*LinkedIn*')
         PreserveAppxPackages     = @('Microsoft.YourPhone', 'MicrosoftWindows.CrossDevice')
-        RedirectKnownFolders     = $true
-        KnownFoldersPathKey      = 'PersonalData'
+        RedirectKnownFolders     = $false
+        RestoreKnownFoldersToProfile = $true
+        KnownFoldersPathKey      = 'UserRoot'
         KnownFolders             = @('Desktop', 'Documents', 'Downloads', 'Music', 'Pictures', 'Videos')
         CopyKnownFolderContent   = $true
+        ProfileLink = @{
+            Enabled = $true
+            PathKey = 'UserRoot'
+            Name    = 'Data'
+        }
+        GoogleDrive = @{
+            Enabled = $false
+            Mode    = 'Streaming'
+            PathKey = 'Drive'
+        }
         WallpaperPath            = ''
     }
 

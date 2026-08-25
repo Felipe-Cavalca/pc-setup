@@ -20,10 +20,13 @@ if (-not $Storage) { $Storage = Resolve-PcSetupStorage -Configuration $configura
 $paths = Get-PcSetupConfiguredPaths -Configuration $configuration -Storage $Storage
 $primaryUser = [string]$configuration.Accounts.DailyUser.Name
 
-$developmentGrants = @(@{ Identity = $primaryUser; Rights = 'Modify' })
+$sharedGrants = @(@{ Identity = $primaryUser; Rights = 'Modify' })
+if ($configuration.Accounts.Public.Enabled) {
+    $sharedGrants += @{ Identity = [string]$configuration.Accounts.Public.Name; Rights = 'Modify' }
+}
 $targets = @(
-    [pscustomobject]@{ Key = 'Development'; Path = $paths.Development; Grants = $developmentGrants },
-    [pscustomobject]@{ Key = 'PersonalData'; Path = $paths.PersonalData; Grants = @(@{ Identity = $primaryUser; Rights = 'FullControl' }) }
+    [pscustomobject]@{ Key = 'UserRoot'; Path = $paths.UserRoot; Grants = @(@{ Identity = $primaryUser; Rights = 'FullControl' }) },
+    [pscustomobject]@{ Key = 'Shared'; Path = $paths.Shared; Grants = $sharedGrants }
 )
 if ($configuration.Backup.Enabled) {
     $targets += [pscustomobject]@{ Key = 'Backups'; Path = $paths[[string]$configuration.Backup.StagingPathKey]; Grants = @(@{ Identity = $primaryUser; Rights = 'FullControl' }) }
@@ -58,7 +61,7 @@ try {
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "ACL recusada em ponto de nova analise: $($target.Path)" }
 
         $backupFile = Join-Path $backupRoot ($target.Key + '.acl')
-        Invoke-IcaclsChecked -Arguments @($target.Path, '/save', $backupFile, '/T', '/C', '/Q')
+        Invoke-IcaclsChecked -Arguments @($target.Path, '/save', $backupFile, '/C', '/Q')
         $backups += [pscustomobject]@{ Key = $target.Key; Path = $target.Path; Parent = (Split-Path -Parent $target.Path); File = $backupFile }
     }
 

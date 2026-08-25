@@ -11,7 +11,7 @@ function Assert-True([bool]$Condition, [string]$Message) {
 $temporaryRoot = Join-Path $env:TEMP ('pc-setup-restore-test-' + [guid]::NewGuid().ToString('N'))
 try {
     $snapshot = Join-Path $temporaryRoot 'backup-2026-01-01_000000'
-    $source = Join-Path $snapshot 'PersonalData'
+    $source = Join-Path $snapshot 'WindowsProfile'
     New-Item -ItemType Directory -Path $source -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $source 'arquivo.txt') -Value 'conteudo restauravel' -Encoding UTF8
     $files = @(Get-PcSetupBackupFileRecords -SnapshotPath $snapshot)

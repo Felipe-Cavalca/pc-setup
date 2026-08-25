@@ -60,6 +60,9 @@ function Import-PcSetupConfiguration {
             Epic   = @{ Enabled = $false; PathKey = 'Games'; Mode = 'ManualRequired' }
         }
     }
+    if ($configuration.Storage -is [hashtable] -and $configuration.Storage.Data -is [hashtable] -and -not $configuration.Storage.Data.ContainsKey('DedicatedVolumeSubdirectory')) {
+        $configuration.Storage.Data['DedicatedVolumeSubdirectory'] = ''
+    }
     if (-not $configuration.ContainsKey('Backup')) {
         $configuration['Backup'] = @{
             Enabled = $false; StagingPathKey = 'Backups'; SourcePathKeys = @(); ExternalDestination = ''
@@ -70,6 +73,12 @@ function Import-PcSetupConfiguration {
         $configuration.Backup['RestoreTest'] = @{
             Enabled = $false; Destination = '{LocalAppData}\pc-setup\restore-tests'; KeepRestoredCopy = $false
         }
+    }
+    if ($configuration.Backup -is [hashtable] -and -not $configuration.Backup.ContainsKey('UserProfileFolders')) {
+        $configuration.Backup['UserProfileFolders'] = @()
+    }
+    if ($configuration.Backup -is [hashtable] -and -not $configuration.Backup.ContainsKey('IncludeSetupInventory')) {
+        $configuration.Backup['IncludeSetupInventory'] = $false
     }
     if (-not $configuration.ContainsKey('MachineAudit')) {
         $configuration['MachineAudit'] = @{
@@ -116,6 +125,18 @@ function Import-PcSetupConfiguration {
     if ($configuration.Agent -is [hashtable] -and -not $configuration.Agent.ContainsKey('EnvironmentAllowList')) {
         $configuration.Agent['EnvironmentAllowList'] = @()
     }
+    if ($configuration.Personalization -is [hashtable] -and -not $configuration.Personalization.ContainsKey('RestoreKnownFoldersToProfile')) {
+        $configuration.Personalization['RestoreKnownFoldersToProfile'] = $false
+    }
+    if ($configuration.Personalization -is [hashtable] -and -not $configuration.Personalization.ContainsKey('DisableWebSearch')) {
+        $configuration.Personalization['DisableWebSearch'] = $false
+    }
+    if ($configuration.Personalization -is [hashtable] -and -not $configuration.Personalization.ContainsKey('ProfileLink')) {
+        $configuration.Personalization['ProfileLink'] = @{ Enabled = $false; PathKey = 'UserRoot'; Name = 'Data' }
+    }
+    if ($configuration.Personalization -is [hashtable] -and -not $configuration.Personalization.ContainsKey('GoogleDrive')) {
+        $configuration.Personalization['GoogleDrive'] = @{ Enabled = $false; Mode = 'Streaming'; PathKey = 'Drive' }
+    }
     $requiredKeys = @{
         Execution      = @('Mode','OnMissingSetting','CollectSecretsBeforeApply','StoreSecretsInRepository')
         Reconciliation = @('Mode','DisableUnrequestedFeatures','RemoveDisabledAccounts','RemoveUnlistedPackages','RemoveUnlistedDirectories')
@@ -125,17 +146,18 @@ function Import-PcSetupConfiguration {
         Packages       = @('Enabled','PreferredSource','PreferCurrentVersion','InstallScope','DefaultCriticality','Profiles','AllowOfflineFallback','OfflineInstallerDirectory','OfflineManifest','RetryCount')
         WSL            = @('Update','DefaultVersion','Distribution','Environments')
         Personalization = @(
-            'Enabled','ApplyOnInstall','PromptOnUpdate','Theme','HideTaskbarSearch','HideTaskView',
+            'Enabled','ApplyOnInstall','PromptOnUpdate','Theme','HideTaskbarSearch','HideTaskView','DisableWebSearch',
             'ClearStartPins','StartAllAppsView','StartPowerMenuFolders','DisableEdgeBackground',
             'RemoveOneDrive','RemoveAppxPackages','PreserveAppxPackages','RedirectKnownFolders',
-            'KnownFoldersPathKey','KnownFolders','CopyKnownFolderContent','WallpaperPath'
+            'RestoreKnownFoldersToProfile','KnownFoldersPathKey','KnownFolders','CopyKnownFolderContent',
+            'ProfileLink','GoogleDrive','WallpaperPath'
         )
         Debloat        = @('Enabled','Mode','Repository','Release','ArchiveSha256','Preset','Silent','AppRemovalTarget','RemoveGamingApps','RequireSha256','RequireConfirmation')
         Recovery       = @('RequireRestorePointBeforeChanges','Scope','SystemProtectionMustBeEnabled','EnableSystemProtectionAutomatically','FailIfRestorePointUnavailable','AllowExistingRestorePointReuse','AllowSameApplySessionReuse','ProtectDirectScriptExecution','UserPhaseReceiptMaxAgeHours')
         Security       = @('DailyUserMustBeStandard','BackupAclBeforeChanges','ManageBitLocker','BitLockerMode','ReportBitLockerStatus','RequireRecoveryKeyCheck','DemoteDailyUserAutomatically','HyperVAdministratorAccounts')
         Runtime        = @('StateDirectory','ReportDirectory','UserStateDirectory','UserReportDirectory','WingetInventoryPath','KnownGoodVersionPath','ExecutionLogEnabled','StopOnError','RequirePlanBeforeApply')
         Agent          = @('Enabled','Environment','DefaultCommand','Isolation','Harness','Memory','Launcher','Workspace','Capabilities','EnvironmentAllowList','VirtualMachine','RestrictedMode')
-        Backup         = @('Enabled','StagingPathKey','SourcePathKeys','ExternalDestination','VerifyHashes','NoAutomaticDeletion','RestoreTest')
+        Backup         = @('Enabled','StagingPathKey','SourcePathKeys','UserProfileFolders','IncludeSetupInventory','ExternalDestination','VerifyHashes','NoAutomaticDeletion','RestoreTest')
         MachineAudit   = @('Enabled','GenerateAfterReconciliation','OutputDirectory','FileBaseName','Formats')
         PlanSummary    = @('Enabled','OutputDirectory','FileBaseName','Formats')
         Versions       = @('Mode','LockFile','CaptureKnownGood')
@@ -145,7 +167,8 @@ function Import-PcSetupConfiguration {
     }
     foreach ($key in @('System','Data','Paths','Integrations')) { Assert-PcSetupTableKey -Table $configuration.Storage -Key $key -Path 'config.Storage' }
     foreach ($key in @('Selection','RequireHealthy')) { Assert-PcSetupTableKey -Table $configuration.Storage.System -Key $key -Path 'config.Storage.System' }
-    foreach ($key in @('Mode','SecondaryDiskPolicy','OnMultipleCandidates','AllowRemovableVolumes','RequireHealthy')) { Assert-PcSetupTableKey -Table $configuration.Storage.Data -Key $key -Path 'config.Storage.Data' }
+    foreach ($key in @('Mode','SecondaryDiskPolicy','OnMultipleCandidates','DedicatedVolumeSubdirectory','AllowRemovableVolumes','RequireHealthy')) { Assert-PcSetupTableKey -Table $configuration.Storage.Data -Key $key -Path 'config.Storage.Data' }
+    foreach ($key in @('UserRoot','Shared')) { Assert-PcSetupTableKey -Table $configuration.Storage.Paths -Key $key -Path 'config.Storage.Paths' }
 
     if ($configuration.SchemaVersion -ne '1.0') { throw "SchemaVersion nao suportada: $($configuration.SchemaVersion)" }
     if ($configuration.Execution.Mode -notin @('Unattended','Interactive')) { throw 'Execution.Mode deve ser Unattended ou Interactive.' }
@@ -164,6 +187,15 @@ function Import-PcSetupConfiguration {
     }
     if ($configuration.Storage.Data.Mode -eq 'Adaptive' -and -not $configuration.Storage.Data.ContainsKey('SingleDiskFallbackRoot')) { throw 'Storage.Data.SingleDiskFallbackRoot e obrigatorio no modo Adaptive.' }
     if ($configuration.Storage.Data.Mode -eq 'DirectoryOnSystemVolume' -and -not $configuration.Storage.Data.ContainsKey('Root')) { throw 'Storage.Data.Root e obrigatorio no modo DirectoryOnSystemVolume.' }
+    $dedicatedSubdirectory = [string]$configuration.Storage.Data.DedicatedVolumeSubdirectory
+    if ($dedicatedSubdirectory -match "[`r`n]" -or [IO.Path]::IsPathRooted($dedicatedSubdirectory) -or $dedicatedSubdirectory -match '(^|[\\/])\.\.([\\/]|$)') {
+        throw 'Storage.Data.DedicatedVolumeSubdirectory deve ser vazio ou um caminho relativo seguro.'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($dedicatedSubdirectory)) {
+        try { $dedicatedSubdirectoryTest = [IO.Path]::GetFullPath((Join-Path 'C:\' $dedicatedSubdirectory)) }
+        catch { throw 'Storage.Data.DedicatedVolumeSubdirectory contem um caminho invalido.' }
+        if ($dedicatedSubdirectoryTest.TrimEnd('\') -eq 'C:') { throw 'Use vazio para selecionar a raiz do volume dedicado.' }
+    }
     if ($configuration.Recovery.RequireRestorePointBeforeChanges -ne $true -or $configuration.Recovery.FailIfRestorePointUnavailable -ne $true) {
         throw 'O ponto de restauracao obrigatorio nao pode ser desabilitado.'
     }
@@ -207,8 +239,8 @@ function Import-PcSetupConfiguration {
     if (-not $configuration.Runtime.StopOnError -or -not $configuration.Runtime.RequirePlanBeforeApply) { throw 'Runtime deve interromper em erro e exigir plano antes da aplicacao.' }
     if (-not ($configuration.Runtime.ExecutionLogEnabled -is [bool])) { throw 'Runtime.ExecutionLogEnabled deve ser booleano.' }
     foreach ($setting in @(
-        'Enabled','ApplyOnInstall','PromptOnUpdate','HideTaskbarSearch','HideTaskView','ClearStartPins',
-        'DisableEdgeBackground','RemoveOneDrive','RedirectKnownFolders','CopyKnownFolderContent'
+        'Enabled','ApplyOnInstall','PromptOnUpdate','HideTaskbarSearch','HideTaskView','DisableWebSearch','ClearStartPins',
+        'DisableEdgeBackground','RemoveOneDrive','RedirectKnownFolders','RestoreKnownFoldersToProfile','CopyKnownFolderContent'
     )) {
         if (-not ($configuration.Personalization[$setting] -is [bool])) { throw "Personalization.$setting deve ser booleano." }
     }
@@ -220,10 +252,22 @@ function Import-PcSetupConfiguration {
     $configuration.Personalization.StartPowerMenuFolders = @($configuredStartFolders | Select-Object -Unique)
     $knownFolderNames = @('Desktop','Documents','Downloads','Music','Pictures','Videos')
     $configuredKnownFolders = @($configuration.Personalization.KnownFolders | ForEach-Object { [string]$_ })
-    if ($configuration.Personalization.RedirectKnownFolders -and $configuredKnownFolders.Count -eq 0) { throw 'Personalization.KnownFolders exige ao menos uma pasta quando o redirecionamento esta habilitado.' }
+    if (($configuration.Personalization.RedirectKnownFolders -or $configuration.Personalization.RestoreKnownFoldersToProfile) -and $configuredKnownFolders.Count -eq 0) { throw 'Personalization.KnownFolders exige ao menos uma pasta quando o gerenciamento esta habilitado.' }
     if (@($configuredKnownFolders | Where-Object { $_ -notin $knownFolderNames }).Count -gt 0) { throw 'Personalization.KnownFolders contem uma pasta desconhecida.' }
     $configuration.Personalization.KnownFolders = @($configuredKnownFolders | Select-Object -Unique)
-    if (-not $configuration.Storage.Paths.ContainsKey([string]$configuration.Personalization.KnownFoldersPathKey)) { throw 'Personalization.KnownFoldersPathKey deve apontar para uma entrada de Storage.Paths.' }
+    if ($configuration.Personalization.RedirectKnownFolders -and -not $configuration.Storage.Paths.ContainsKey([string]$configuration.Personalization.KnownFoldersPathKey)) { throw 'Personalization.KnownFoldersPathKey deve apontar para uma entrada de Storage.Paths.' }
+    if ($configuration.Personalization.RedirectKnownFolders -and $configuration.Personalization.RestoreKnownFoldersToProfile) { throw 'Escolha redirecionar ou restaurar as pastas conhecidas; os dois modos nao podem ficar habilitados.' }
+    foreach ($sectionName in @('ProfileLink','GoogleDrive')) {
+        $section = $configuration.Personalization[$sectionName]
+        if (-not ($section -is [hashtable])) { throw "Personalization.$sectionName deve ser uma hashtable." }
+        foreach ($key in @('Enabled','PathKey')) { Assert-PcSetupTableKey -Table $section -Key $key -Path "config.Personalization.$sectionName" }
+        if (-not ($section.Enabled -is [bool])) { throw "Personalization.$sectionName.Enabled deve ser booleano." }
+        if ($section.Enabled -and -not $configuration.Storage.Paths.ContainsKey([string]$section.PathKey)) { throw "Personalization.$sectionName.PathKey nao existe em Storage.Paths." }
+    }
+    Assert-PcSetupTableKey -Table $configuration.Personalization.ProfileLink -Key 'Name' -Path 'config.Personalization.ProfileLink'
+    if ([string]$configuration.Personalization.ProfileLink.Name -notmatch '^[^\\/:*?"<>|\r\n]+$' -or [string]$configuration.Personalization.ProfileLink.Name -in @('.', '..')) { throw 'Personalization.ProfileLink.Name deve ser um unico nome de pasta valido.' }
+    Assert-PcSetupTableKey -Table $configuration.Personalization.GoogleDrive -Key 'Mode' -Path 'config.Personalization.GoogleDrive'
+    if ([string]$configuration.Personalization.GoogleDrive.Mode -ne 'Streaming') { throw 'Personalization.GoogleDrive.Mode suportado: Streaming.' }
     foreach ($listName in @('RemoveAppxPackages','PreserveAppxPackages')) {
         $items = @($configuration.Personalization[$listName] | ForEach-Object { [string]$_ })
         if (@($items | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -match "[`r`n]" }).Count -gt 0) { throw "Personalization.$listName contem um item invalido." }
@@ -254,7 +298,11 @@ function Import-PcSetupConfiguration {
         if ($backupSources -contains $key) { throw "Backup.SourcePathKeys contem item duplicado: $key" }
         $backupSources += $key
     }
-    if ($configuration.Backup.Enabled -and $backupSources.Count -eq 0) { throw 'Backup habilitado exige ao menos uma origem.' }
+    $backupProfileFolders = @($configuration.Backup.UserProfileFolders | ForEach-Object { [string]$_ })
+    if (@($backupProfileFolders | Where-Object { $_ -notin $knownFolderNames }).Count -gt 0) { throw 'Backup.UserProfileFolders contem uma pasta desconhecida.' }
+    $configuration.Backup.UserProfileFolders = @($backupProfileFolders | Select-Object -Unique)
+    if (-not ($configuration.Backup.IncludeSetupInventory -is [bool])) { throw 'Backup.IncludeSetupInventory deve ser booleano.' }
+    if ($configuration.Backup.Enabled -and $backupSources.Count -eq 0 -and $configuration.Backup.UserProfileFolders.Count -eq 0) { throw 'Backup habilitado exige ao menos uma origem.' }
     if ($configuration.Backup.Enabled -and $configuration.Backup.VerifyHashes -ne $true) { throw 'O backup habilitado deve verificar hashes.' }
     if ($configuration.Backup.NoAutomaticDeletion -ne $true) { throw 'Backup.NoAutomaticDeletion deve permanecer true.' }
     if ([string]$configuration.Backup.ExternalDestination -match "[`r`n]") { throw 'Backup.ExternalDestination nao pode conter quebra de linha.' }
@@ -615,7 +663,12 @@ function Resolve-PcSetupStorage {
             if (-not [string]::IsNullOrWhiteSpace($SelectedDataRoot)) {
                 $normalizedSelection = [IO.Path]::GetFullPath($SelectedDataRoot)
                 if ($normalizedSelection.TrimEnd('\') -ne $fallbackRoot.TrimEnd('\')) {
-                    $selectedVolume = $candidates | Where-Object { ([IO.Path]::GetFullPath([string]$_.Root)).TrimEnd('\') -eq $normalizedSelection.TrimEnd('\') } | Select-Object -First 1
+                    $selectedVolume = $candidates | Where-Object {
+                        $candidateRoot = [IO.Path]::GetFullPath([string]$_.Root)
+                        $subdirectory = [string]$dataConfiguration.DedicatedVolumeSubdirectory
+                        $candidateDataRoot = if ([string]::IsNullOrWhiteSpace($subdirectory)) { $candidateRoot } else { [IO.Path]::GetFullPath((Join-Path $candidateRoot $subdirectory)) }
+                        $candidateDataRoot.TrimEnd('\') -eq $normalizedSelection.TrimEnd('\')
+                    } | Select-Object -First 1
                     if (-not $selectedVolume) { throw "A escolha de armazenamento do plano nao esta mais disponivel: $normalizedSelection" }
                 }
             }
@@ -636,7 +689,13 @@ function Resolve-PcSetupStorage {
     }
 
     if ($selectedVolume) {
-        $dataRoot = [IO.Path]::GetFullPath([string]$selectedVolume.Root)
+        $volumeRoot = [IO.Path]::GetFullPath([string]$selectedVolume.Root)
+        $subdirectory = [string]$dataConfiguration.DedicatedVolumeSubdirectory
+        $dataRoot = if ([string]::IsNullOrWhiteSpace($subdirectory)) { $volumeRoot } else { [IO.Path]::GetFullPath((Join-Path $volumeRoot $subdirectory)) }
+        $volumePrefix = $volumeRoot.TrimEnd('\') + '\'
+        if ($dataRoot.TrimEnd('\') -ne $volumeRoot.TrimEnd('\') -and -not $dataRoot.StartsWith($volumePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Storage.Data.DedicatedVolumeSubdirectory sai do volume dedicado.'
+        }
         $dataMode = 'DedicatedVolume'
     }
     else {

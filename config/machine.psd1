@@ -45,6 +45,8 @@
             Mode                       = 'Adaptive'
             SecondaryDiskPolicy        = 'Ask'
             OnMultipleCandidates       = 'Stop'
+            # Vazio usa a raiz do segundo volume (por exemplo, D:\). Use 'Dados' para D:\Dados.
+            DedicatedVolumeSubdirectory = ''
             SingleDiskFallbackRoot     = '{SystemRoot}\Dados'
             AllowRemovableVolumes      = $false
             RequireHealthy             = $true
@@ -52,13 +54,14 @@
 
         # Caminhos relativos a Storage.Data.Root. {PrimaryUser} será substituído pelo usuário principal.
         Paths = @{
-            Apps         = 'Apps'
-            Games        = 'Games'
-            Development  = 'Dev'
-            PersonalData = 'Data\{PrimaryUser}'
+            UserRoot     = '{PrimaryUser}'
+            Apps         = '{PrimaryUser}\Apps'
+            Games        = '{PrimaryUser}\Games'
+            Development  = '{PrimaryUser}\Dev'
+            Drive        = '{PrimaryUser}\Drive'
             Shared       = 'Shared'
-            VirtualMachines = 'VMs'
-            Containers   = 'Containers'
+            VirtualMachines = '{PrimaryUser}\VMs'
+            Containers   = '{PrimaryUser}\Containers'
             Backups      = 'Backups'
         }
 
@@ -89,7 +92,9 @@
     Backup = @{
         Enabled              = $true
         StagingPathKey       = 'Backups'
-        SourcePathKeys       = @('PersonalData', 'Development')
+        SourcePathKeys       = @('Development')
+        UserProfileFolders   = @('Desktop', 'Documents', 'Downloads', 'Music', 'Pictures', 'Videos')
+        IncludeSetupInventory = $true
         ExternalDestination  = ''
         VerifyHashes         = $true
         NoAutomaticDeletion  = $true
@@ -272,6 +277,7 @@
         Theme                    = 'Dark'
         HideTaskbarSearch        = $true
         HideTaskView             = $true
+        DisableWebSearch         = $true
         ClearStartPins           = $true
         StartAllAppsView         = 'Category'
         StartPowerMenuFolders    = @('Settings')
@@ -279,12 +285,23 @@
         RemoveOneDrive           = $true
         RemoveAppxPackages       = @('*LinkedIn*')
         PreserveAppxPackages     = @('Microsoft.YourPhone', 'MicrosoftWindows.CrossDevice')
-        RedirectKnownFolders     = $true
-        KnownFoldersPathKey      = 'PersonalData'
+        RedirectKnownFolders     = $false
+        RestoreKnownFoldersToProfile = $true
+        KnownFoldersPathKey      = 'UserRoot'
         KnownFolders             = @('Desktop', 'Documents', 'Downloads', 'Music', 'Pictures', 'Videos')
         CopyKnownFolderContent   = $true
+        ProfileLink = @{
+            Enabled = $true
+            PathKey = 'UserRoot'
+            Name    = 'Data'
+        }
+        GoogleDrive = @{
+            Enabled = $true
+            Mode    = 'Streaming'
+            PathKey = 'Drive'
+        }
         # Coloque a imagem dentro do projeto e informe o caminho relativo; vazio mantem o plano atual.
-        WallpaperPath            = 'config\wallpapers\felipe.jpg'
+        WallpaperPath            = 'config\wallpapers\gargantua-realistic.png'
     }
 
     Versions = @{

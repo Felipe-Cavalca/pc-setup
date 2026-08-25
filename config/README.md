@@ -28,6 +28,8 @@ Valores de `Storage.Data.SecondaryDiskPolicy`:
 
 `OnMultipleCandidates` permanece `Stop`. Dispositivos removíveis não participam por padrão.
 
+`DedicatedVolumeSubdirectory = ''` usa diretamente a raiz do segundo volume, como `D:\`. Um valor relativo, como `'Dados'`, muda a raiz para `D:\Dados`. Em ambos os casos, `Storage.Paths` organiza as pastas do usuário sob `{PrimaryUser}` e mantém `Backups` e `Shared` globais.
+
 Para um disco:
 
 ```powershell
@@ -40,7 +42,7 @@ Use [`examples/machine-one-disk.psd1`](examples/machine-one-disk.psd1) como pont
 
 `Storage.Integrations` associa destinos lógicos às pastas. `HyperV` aceita aplicação automática e configura os padrões suportados pelo host. Docker, Steam e Epic usam `ManualRequired`: o projeto cria a pasta, mostra o procedimento e registra a pendência, mas não edita arquivos internos desses aplicativos.
 
-`Backup` usa uma pasta de `Storage.Paths` como staging. `SourcePathKeys` seleciona as origens, `ExternalDestination = ''` pergunta o destino no momento da exportação e `NoAutomaticDeletion = $true` impede retenção destrutiva. `RestoreTest` restaura o snapshot mais recente em uma pasta temporária, valida os hashes e, quando `KeepRestoredCopy = $false`, remove somente a cópia de teste depois do sucesso. O staging no mesmo disco é útil para organização e recuperação rápida, mas somente a exportação para outro armazenamento constitui uma cópia independente.
+`Backup` usa uma pasta de `Storage.Paths` como staging. `SourcePathKeys` seleciona origens da árvore de dados e `UserProfileFolders` inclui pastas do perfil original em `C:\Users`; a cópia não segue junções. `IncludeSetupInventory = $true` inclui os JSONs de inventário Winget e versões conhecidas, sem copiar binários instalados. `ExternalDestination = ''` pergunta o destino no momento da exportação e `NoAutomaticDeletion = $true` impede retenção destrutiva. `RestoreTest` restaura o snapshot mais recente em uma pasta temporária, valida os hashes e, quando `KeepRestoredCopy = $false`, remove somente a cópia de teste depois do sucesso. O staging no mesmo disco é útil para organização e recuperação rápida, mas somente a exportação para outro armazenamento constitui uma cópia independente.
 
 `MachineAudit` controla o resumo local. O padrão gera HTML e Markdown na Área de Trabalho ao final de `INSTALAR.cmd` ou `ATUALIZAR.cmd`; o nome e o diretório podem ser alterados. A auditoria é informativa e tolera recursos indisponíveis, registrando-os como tal sem tentar corrigir firmware, drivers ou criptografia.
 
@@ -214,7 +216,7 @@ O setup não ativa, suspende, desativa, armazena chave de recuperação nem exig
 
 `Personalization.Enabled` controla o personalizador. `ApplyOnInstall = $true` o inclui na instalação e `PromptOnUpdate = $true` faz o atualizador perguntar antes de reaplicá-lo. Tema, barra de tarefas, menu Iniciar, Edge, remoções explícitas, pastas conhecidas e plano de fundo permanecem configuráveis no mesmo bloco.
 
-`KnownFoldersPathKey = 'PersonalData'` redireciona as pastas selecionadas para a estrutura de dados. Com `CopyKnownFolderContent = $true`, os arquivos existentes são copiados antes da troca, sem exclusão automática da origem. `PreserveAppxPackages` documenta os componentes que não podem entrar em `RemoveAppxPackages`; o padrão preserva Vincular ao Celular e Cross Device.
+O padrão usa `RedirectKnownFolders = $false` e `RestoreKnownFoldersToProfile = $true`: as pastas conhecidas permanecem no perfil Windows e, se já estiverem redirecionadas, o conteúdo é copiado de volta sem exclusão automática da origem. `ProfileLink` cria `Data` dentro da pasta de dados do usuário como uma junção para o perfil original. `GoogleDrive` registra `Storage.Paths.Drive` como ponto de montagem em modo `Streaming`; login, credenciais e seleção de conta continuam manuais. `PreserveAppxPackages` documenta os componentes que não podem entrar em `RemoveAppxPackages`; o padrão preserva Vincular ao Celular e Cross Device.
 
 O plano de fundo é opcional e precisa estar dentro do projeto. `WallpaperPath = ''` mantém a imagem atual; um caminho relativo aplica a imagem na conta diária. Consulte [`../docs/PERSONALIZACAO.md`](../docs/PERSONALIZACAO.md).
 
