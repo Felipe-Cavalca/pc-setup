@@ -51,6 +51,6 @@ if (-not [string]::IsNullOrWhiteSpace([string]$configuration.WSL.Distribution)) 
 
 Write-Host '[OK] Configuracao global do WSL concluida. Os perfis Linux devem ser aplicados na conta Windows indicada.' -ForegroundColor Green
 foreach ($environment in $environments) {
-    Write-Host "[PENDENTE POR USUARIO] Entre como $($environment.WindowsAccount) e execute .\wsl\bootstrap.ps1 -Environment $($environment.Name) -Apply." -ForegroundColor Yellow
+    Write-Host "[PENDENTE POR USUARIO] Entre como $($environment.WindowsAccount) e execute ATUALIZAR.cmd na raiz." -ForegroundColor Yellow
 }
 [pscustomobject]@{ Step = 'WSL'; Mode = $mode; Enabled = $true; Items = $actions; Environments = $environments }

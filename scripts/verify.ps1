@@ -2,14 +2,16 @@
 [CmdletBinding()]
 param(
     [string]$Config = '',
-    [string]$ReportPath = ''
+    [string]$ReportPath = '',
+    [switch]$PassThru
 )
 
 $ErrorActionPreference = 'Continue'
-if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $PSScriptRoot 'config\machine.psd1' }
-$coreModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Core.psm1'
-$wslModule = Join-Path $PSScriptRoot 'wsl\PcSetup.Wsl.psm1'
-$backupModule = Join-Path $PSScriptRoot 'scripts\lib\PcSetup.Backup.psm1'
+$root = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $root 'config\machine.psd1' }
+$coreModule = Join-Path $PSScriptRoot 'lib\PcSetup.Core.psm1'
+$wslModule = Join-Path $root 'wsl\PcSetup.Wsl.psm1'
+$backupModule = Join-Path $PSScriptRoot 'lib\PcSetup.Backup.psm1'
 Import-Module $coreModule -Force
 Import-Module $wslModule -Force
 Import-Module $backupModule -Force
@@ -296,12 +298,12 @@ if ($configuration.Features.WSL) {
             $installedDistributions = @(Get-PcSetupWslDistributionNames)
             foreach ($environmentDefinition in @(Get-PcSetupWslEnvironments -Configuration $configuration | Where-Object Enabled)) {
                 if ($environmentDefinition.WindowsAccount -ne $env:USERNAME) {
-                    Add-Check -Status 'INFO' -Name "WSL $($environmentDefinition.Name)" -Detail "verifique na sessao Windows de $($environmentDefinition.WindowsAccount) com .\wsl\verify.ps1 -Environment $($environmentDefinition.Name)"
+                    Add-Check -Status 'INFO' -Name "WSL $($environmentDefinition.Name)" -Detail "entre nessa conta e execute VERIFICAR.cmd na raiz"
                     continue
                 }
                 $distribution = [string]$environmentDefinition.Distribution
                 if ($installedDistributions -notcontains $distribution) {
-                    Add-Check -Status 'WARN' -Name "WSL $($environmentDefinition.Name)" -Detail "distribuicao ausente para $env:USERNAME; execute .\wsl\bootstrap.ps1 -Environment $($environmentDefinition.Name) -Apply"
+                    Add-Check -Status 'WARN' -Name "WSL $($environmentDefinition.Name)" -Detail "distribuicao ausente para $env:USERNAME; execute ATUALIZAR.cmd na raiz"
                     continue
                 }
                 $actualWslVersion = Get-PcSetupWslDistributionVersion -Distribution $distribution
@@ -310,7 +312,7 @@ if ($configuration.Features.WSL) {
                 $defaultWslUser = Get-PcSetupWslDefaultUser -Distribution $distribution
                 $expectedDefaultWslUser = Get-PcSetupExpectedWslDefaultUser -Configuration $configuration -Environment $environmentDefinition
                 Add-Check -Status $(if ($defaultWslUser -eq $expectedDefaultWslUser) { 'PASS' } else { 'FAIL' }) -Name "WSL $($environmentDefinition.Name)/usuario padrao" -Detail "esperado=$expectedDefaultWslUser; atual=$defaultWslUser"
-                $verifyLinuxPath = ConvertTo-PcSetupWslPath -Distribution $distribution -WindowsPath (Join-Path $PSScriptRoot 'wsl\linux\verify.sh')
+                $verifyLinuxPath = ConvertTo-PcSetupWslPath -Distribution $distribution -WindowsPath (Join-Path $root 'wsl\linux\verify.sh')
                 $wslVerifyResult = Invoke-PcSetupWslLinuxScript -Distribution $distribution -ScriptPath $verifyLinuxPath -Environment $environmentDefinition -Profile $wslProfile
                 Add-Check -Status $(if ($wslVerifyResult.ExitCode -eq 0) { 'PASS' } else { 'FAIL' }) -Name "WSL $($environmentDefinition.Name)/conteudo" -Detail $(if ($wslVerifyResult.ExitCode -eq 0) { 'usuario, diretorio e pacotes conferidos' } else { "verify Linux retornou $($wslVerifyResult.ExitCode)" })
             }
@@ -389,4 +391,5 @@ if ([string]::IsNullOrWhiteSpace($ReportPath)) {
 Write-PcSetupJson -InputObject $report -Path $ReportPath | Out-Null
 Write-Host "`nRelatorio: $ReportPath"
 Write-Host "Resultado: PASS=$($summary.Pass), WARN=$($summary.Warn), FAIL=$($summary.Fail)"
+if ($PassThru) { return $report }
 if ($summary.Fail -gt 0) { exit 1 }

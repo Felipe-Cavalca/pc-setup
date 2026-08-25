@@ -13,7 +13,7 @@ O projeto executa etapas administrativas e baixa software de terceiros. Revise `
 - instaladores offline exigem caminho permitido, escopo e SHA-256 revisado;
 - `ai-jail` em política `latest` exige o digest SHA-256 publicado pela API de releases do GitHub;
 - `ai-memory` em política `latest` exige o digest SHA-256 publicado, escuta somente em `127.0.0.1` e usa um token gerado localmente;
-- debloat permanece fixado por tag e SHA-256 e exige confirmação separada;
+- debloat permanece fixado por tag e SHA-256 e exige confirmação no plano da instalação ou no launcher independente;
 - o usuário Linux `agent` não recebe senha utilizável, sudo, Docker ou LXD;
 - uma VM descartável continua obrigatória para malware ou código deliberadamente hostil.
 

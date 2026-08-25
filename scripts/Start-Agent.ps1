@@ -79,7 +79,7 @@ try {
     }
     if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { throw 'wsl.exe nao encontrado.' }
     if (@(Get-PcSetupWslDistributionNames) -notcontains $environmentDefinition.Distribution) {
-        throw "Distribuicao ausente. Execute .\wsl\bootstrap.ps1 -Environment $($environmentDefinition.Name) -Apply."
+        throw "Distribuicao ausente. Execute ATUALIZAR.cmd na raiz antes de abrir o agente."
     }
 
     if ([string]::IsNullOrWhiteSpace($Command)) { $Command = [string]$configuration.Agent.DefaultCommand }

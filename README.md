@@ -1,8 +1,26 @@
 # pc-setup
 
-Automação configurável para transformar uma instalação nova ou uma máquina usada com Windows 11 Pro em um computador pessoal pronto para uso.
+Transforma um Windows 11 Pro novo ou usado em um computador pessoal configurado, validado e reproduzível.
 
-O objetivo é partir de qualquer Windows 11 Pro compatível, revisar um único perfil versionado e executar `INSTALAR.cmd`. O projeto planeja, aplica e valida o estado solicitado sem guardar senhas, tokens ou chaves no repositório. Reaplicações usam `ATUALIZAR.cmd`.
+## TL;DR
+
+Revise `config/machine.psd1` e execute `INSTALAR.cmd`. Os arquivos `.cmd` abaixo são as entradas destinadas ao uso manual; os scripts de suporte permanecem nas subpastas.
+
+| Arquivo | O que faz | Breve resumo |
+| --- | --- | --- |
+| `INSTALAR.cmd` | Instalação completa | Planeja, pede confirmação, configura o Windows, aplica o debloat habilitado, instala aplicativos, prepara WSL/Agent e valida o resultado. |
+| `ATUALIZAR.cmd` | Reconciliação | Reaplica a configuração e busca versões atuais sem executar novamente o debloat automaticamente. |
+| `DEBLOAT.cmd` | Debloat independente | Mostra o plano, pede confirmação, cria um ponto de restauração e aplica o Win11Debloat configurado. |
+| `VERIFICAR.cmd` | Verificação geral | Confere o estado prometido pelo perfil e gera o relatório técnico sem aplicar mudanças. |
+| `AGENTE.cmd` | Agente de IA | Abre o agente configurado no WSL, isolado pelo `ai-jail`, para o projeto selecionado. |
+| `BACKUP.cmd` | Backup local | Cria um snapshot local com manifesto e hashes, sem apagar arquivos automaticamente. |
+| `VERIFICAR-BACKUP.cmd` | Verificação de backup | Confere o manifesto e os hashes de um snapshot existente. |
+| `EXPORTAR-BACKUP.cmd` | Cópia externa | Copia um backup local verificado para o destino externo escolhido. |
+| `TESTAR-RESTAURACAO.cmd` | Teste de restauração | Restaura uma cópia temporária, valida os hashes e remove somente o teste. |
+| `RESUMO-DA-MAQUINA.cmd` | Resumo do computador | Atualiza os relatórios HTML e Markdown na Área de Trabalho. |
+| `FIXAR-VERSOES.cmd` | Versões conhecidas | Exporta as versões validadas para uma instalação futura reproduzível. |
+| `TESTAR.cmd` | Testes locais | Valida scripts, configurações, contratos e documentação sem aplicar a instalação. |
+| `TESTAR-INTEGRACAO.cmd` | Teste integral | Executa a auditoria automatizada do projeto sem aplicar a instalação. |
 
 Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-windows/README.md`](imagem-windows/README.md). A mídia fica responsável apenas por instalar o Windows; aplicativos, recursos opcionais, usuários e personalização são tratados depois pelo `pc-setup`.
 
@@ -29,11 +47,12 @@ Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-
 - atualiza na Área de Trabalho uma cópia legível do plano em HTML e Markdown antes de pedir confirmação;
 - registra um snapshot local das versões conhecidas como boas para uma reinstalação reproduzível;
 - prepara backup local verificável, cuja cópia para outro disco é disparada manualmente;
+- aplica durante `INSTALAR.cmd` o debloat fixado e revisado, com confirmação no plano e sem remover Edge ou aplicativos de jogos;
 - permite restaurar integralmente um snapshot em uma pasta temporária, validar os hashes e remover somente essa cópia de teste;
 - gera na Área de Trabalho um resumo informativo em HTML e Markdown com Windows, hardware, virtualização, armazenamento, dispositivos e estado do `pc-setup`;
 - apenas informa o estado do BitLocker, sem configurá-lo.
 
-A conta pública fica habilitada como usuário padrão. A VM opcional e o plano de fundo ficam desabilitados. O debloat é configurado, mas continua sendo uma etapa separada com confirmação própria.
+A conta pública fica habilitada como usuário padrão. A VM opcional e o plano de fundo ficam desabilitados. O debloat configurado participa da instalação e também pode ser reaplicado separadamente por `DEBLOAT.cmd`.
 
 ## Pré-requisitos
 
@@ -55,7 +74,7 @@ O arquivo:
 2. solicita permissão de Administrador;
 3. mostra o plano e o disco escolhido e atualiza `PLANO-PC-SETUP.html` e `PLANO-PC-SETUP.md` na Área de Trabalho;
 4. pede `S` uma única vez;
-5. aplica e valida as configurações de máquina em processo elevado;
+5. aplica e valida as configurações de máquina e o debloat habilitado no mesmo processo elevado e protegido;
 6. se a conta atual não for a conta diária configurada, pede para entrar nela e executar o mesmo arquivo novamente;
 7. na conta diária, aplica pacotes e personalização no perfil correto, elevando somente instaladores de máquina que precisarem;
 8. aplica e valida os ambientes WSL da conta diária, primeiro o usuário padrão e depois o `agent`;
@@ -75,7 +94,7 @@ Depois de alterar `config/machine.psd1`, os perfis ou os scripts, dê duplo cliq
 3. interrompe e pede reinício quando um recurso do Windows exigir;
 4. reaplica e valida primeiro o usuário Linux padrão e depois o `agent`.
 
-Esse fluxo atualiza pacotes com política de versão atual, incluindo Winget, APT, `Agent.Harness.Version = 'latest'`, `Agent.Memory.Version = 'latest'` e `AiJail.Version = 'latest'`. Ele não atualiza o próprio repositório por Git e não envia credenciais ao repositório.
+Esse fluxo atualiza pacotes com política de versão atual, incluindo Winget, APT, `Agent.Harness.Version = 'latest'`, `Agent.Memory.Version = 'latest'` e `AiJail.Version = 'latest'`. Ele não atualiza o próprio repositório por Git, não envia credenciais ao repositório e não reaplica o debloat; use `DEBLOAT.cmd` quando quiser executá-lo novamente.
 
 `INSTALAR.cmd` e `ATUALIZAR.cmd` usam o mesmo orquestrador. O primeiro comunica a instalação inicial; o segundo comunica a reconciliação de uma máquina já configurada. Depois que uma execução termina por completo, `ATUALIZAR.cmd` volta a conferir e reaplicar normalmente o estado desejado.
 
@@ -83,36 +102,13 @@ Esse fluxo atualiza pacotes com política de versão atual, incluindo Winget, AP
 
 O modo suportado é aditivo e não destrutivo. O projeto cria, habilita, instala e atualiza o que está configurado, mas não desinstala automaticamente pacotes que saíram da lista, não apaga contas ou diretórios e não desabilita recursos que passaram para `false`. Mudanças de remoção devem ser executadas e revisadas separadamente.
 
-Isso permite usar o mesmo fluxo em máquinas novas ou usadas sem transformar uma alteração de configuração em exclusão silenciosa. O `verify.ps1` valida o estado prometido pelo perfil, não exige que a máquina contenha somente os itens declarados.
+Isso permite usar o mesmo fluxo em máquinas novas ou usadas sem transformar uma alteração de configuração em exclusão silenciosa. O `VERIFICAR.cmd` valida o estado prometido pelo perfil, não exige que a máquina contenha somente os itens declarados.
 
-### Execução manual
+### Entradas manuais
 
-Abra o **Windows PowerShell 5.1 como Administrador** na pasta do projeto:
+Use somente os launchers `.cmd` documentados no TL;DR. `INSTALAR.cmd` já mostra o plano, pede confirmação, solicita elevação e retoma depois de reinícios. `VERIFICAR.cmd` executa a conferência completa sob demanda. Arquivos `.ps1` em `scripts`, `wsl` e outras subpastas são complementos internos desses launchers.
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\bootstrap.ps1 -Config .\config\machine.psd1 -Plan
-```
-
-Leia o plano mostrado e o caminho do relatório. O JSON técnico continua em `%ProgramData%\pc-setup\reports`; o perfil padrão também atualiza `PLANO-PC-SETUP.html` e `.md` na Área de Trabalho com a mesma prévia. Se a escolha do disco, usuários, recursos e programas estiver correta:
-
-```powershell
-.\bootstrap.ps1 -Config .\config\machine.psd1 -Apply
-```
-
-O recibo inclui a impressão SHA-256 dos scripts, da configuração e dos perfis de pacotes. Qualquer mudança relevante exige gerar o plano novamente.
-
-As senhas são solicitadas somente para contas habilitadas que ainda não existam. Elas permanecem apenas na memória do processo.
-
-Se recursos do Windows exigirem reinício, o script para e mostra a instrução. Reinicie e execute o mesmo comando `-Apply`. A retomada valida e reutiliza o ponto pertencente àquela aplicação; um ponto antigo de outra execução nunca é aceito.
-
-Ao terminar:
-
-```powershell
-.\verify.ps1 -Config .\config\machine.psd1
-```
-
-O verificador classifica cada item como `PASS`, `WARN`, `FAIL` ou `INFO`. Avisos exigem revisão; falhas fazem o comando retornar código 1.
+O recibo inclui a impressão SHA-256 dos scripts, da configuração e dos perfis de pacotes. Qualquer mudança relevante exige gerar o plano novamente. Senhas de contas novas são solicitadas em prompt seguro e permanecem somente na memória do processo.
 
 ## Saída da execução
 
@@ -125,7 +121,7 @@ O plano apresenta:
 - permissões que serão aplicadas;
 - IDs dos programas e disponibilidade de fallback offline;
 - configuração prevista para WSL e personalização;
-- estado do debloat separado.
+- debloat que fará parte da instalação.
 
 Na aplicação, cada etapa mostra `OK`, `CRIADO`, `APLICAR`, `WINGET`, `OFFLINE`, `RECOVERY` ou uma mensagem de erro. Códigos de erro de ferramentas externas são tratados como falha.
 
@@ -233,12 +229,7 @@ Use `config/machine.psd1` como referência e altere, principalmente:
 - perfis de programas;
 - ambientes WSL por conta e os respectivos perfis Linux.
 
-Exemplo:
-
-```powershell
-.\bootstrap.ps1 -Config .\config\exemplo-maquina.psd1 -Plan
-.\bootstrap.ps1 -Config .\config\exemplo-maquina.psd1 -Apply
-```
+Para usar outra configuração, copie os valores desejados para `config/machine.psd1`, revise o diff e execute o launcher correspondente na raiz.
 
 Veja todas as decisões em [`config/README.md`](config/README.md).
 
@@ -246,7 +237,7 @@ Veja todas as decisões em [`config/README.md`](config/README.md).
 
 O Windows limita `Checkpoint-Computer` a um ponto por período de 24 horas. Por isso, uma aplicação cria um ponto único. Scripts internos o validam e reutilizam; a continuação depois do reinício usa o mesmo identificador salvo em `%ProgramData%\pc-setup\apply-state.json`.
 
-Executar um script de alteração diretamente com `-Apply` exige um novo ponto. `-Plan`, `verify.ps1`, testes e o lançador da VM não alteram a configuração do Windows e não criam ponto.
+Cada launcher de alteração abre sua própria sessão protegida. `VERIFICAR.cmd`, os testes e o lançador da VM não alteram a configuração do Windows e não criam ponto.
 
 Relatórios e estado das operações de máquina ficam em `%ProgramData%\pc-setup`. Inventário Winget, personalização e ambientes WSL ficam em `%LOCALAPPDATA%\pc-setup` da conta diária. Um ponto de restauração protege configurações e arquivos de sistema, mas não substitui backup dos arquivos pessoais.
 
@@ -264,7 +255,7 @@ Uma imagem local pode ser adicionada ao projeto e indicada em `Personalization.W
 
 ### Debloat
 
-O debloat não faz parte do bootstrap de aplicação. O perfil Felipe fixa Win11Debloat `2026.07.11`, valida o SHA-256 e aplica `RunDefaults` silenciosamente para todos os usuários, sem `RemoveGamingApps`. A execução exige leitura da documentação e confirmação explícita. Veja [`docs/DEBLOAT.md`](docs/DEBLOAT.md).
+O perfil Felipe fixa Win11Debloat `2026.07.11`, valida o SHA-256 e aplica `RunDefaults` silenciosamente para todos os usuários, sem `RemoveGamingApps`. `INSTALAR.cmd` o inclui no plano e na confirmação da instalação. `DEBLOAT.cmd` permite planejar e executar novamente de forma independente. Veja [`docs/DEBLOAT.md`](docs/DEBLOAT.md).
 
 ### Contas e VMs opcionais
 
@@ -272,15 +263,15 @@ A conta pública fica habilitada como usuário padrão, com Edge e Chrome destin
 
 ## Testes do projeto
 
-Os testes não alteram o Windows nem criam ponto real:
+Os testes não alteram o Windows nem criam ponto real. Execute na raiz:
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\run-all.ps1
+```text
+TESTAR.cmd
 ```
 
 A CI executa a mesma suíte em Windows PowerShell 5.1, valida PowerShell e PSD1, roda o PSScriptAnalyzer e verifica os scripts WSL com `bash -n` e ShellCheck.
 
-Depois de uma instalação completa em VM ou máquina real, entre na conta diária e execute `TESTAR-INTEGRACAO.cmd`. Ele automatiza a suíte do projeto, solicita UAC para o `verify.ps1` somente leitura e valida os ambientes WSL aplicáveis, gerando `integration-test-*.json`. A criação da VM, os reinícios e a comprovação visual do primeiro logon continuam no roteiro manual porque não são reproduzíveis com segurança nos runners hospedados do GitHub.
+Depois de uma instalação completa em VM ou máquina real, entre na conta diária e execute `TESTAR-INTEGRACAO.cmd`. Ele automatiza a suíte do projeto, solicita UAC para a verificação somente leitura e valida os ambientes WSL aplicáveis, gerando `integration-test-*.json`. A criação da VM, os reinícios e a comprovação visual do primeiro logon continuam no roteiro manual porque não são reproduzíveis com segurança nos runners hospedados do GitHub.
 
 Consulte também [`SECURITY.md`](SECURITY.md) para o modelo de suporte e reporte de vulnerabilidades. O mantenedor ainda precisa escolher e publicar uma licença antes de declarar permissões de reutilização.
 

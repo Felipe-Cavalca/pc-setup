@@ -4,12 +4,7 @@
 
 Nunca coloque no arquivo senhas, tokens, chaves de produto, certificados ou chaves de recuperação.
 
-`INSTALAR.cmd` e `ATUALIZAR.cmd` carregam `config\machine.psd1` e usam o mesmo orquestrador de Windows e WSL. Um perfil diferente pode ser usado de duas formas:
-
-- revisar e substituir o conteúdo de `machine.psd1` em um fork próprio;
-- executar manualmente `bootstrap.ps1 -Config <arquivo>` para selecionar outro `.psd1`.
-
-Para outro perfil no fluxo completo, execute `scripts\Start-PcSetupUpdate.ps1 -Config <arquivo>`. Use `-LauncherName INSTALAR.cmd` para uma instalação inicial ou mantenha o padrão `ATUALIZAR.cmd` para uma reconciliação posterior.
+`INSTALAR.cmd` e `ATUALIZAR.cmd` carregam `config\machine.psd1` e usam o mesmo orquestrador de Windows e WSL. Para outro perfil, preserve uma cópia do arquivo atual, substitua o conteúdo de `machine.psd1` pelo perfil revisado e use um dos launchers da raiz. Os arquivos `.ps1` são complementos internos e não são entradas de uso normal.
 
 ## Execução
 
@@ -219,7 +214,7 @@ O setup não ativa, suspende, desativa, armazena chave de recuperação nem exig
 
 O plano de fundo começa desabilitado e precisa estar dentro do projeto. Ele é aplicado sem elevação na sessão da conta diária, depois que o relatório da fase Windows comprova um ponto de restauração válido.
 
-O perfil Felipe habilita um debloat separado e reproduzível:
+O perfil Felipe habilita um debloat reproduzível, aplicado por `INSTALAR.cmd` e disponível separadamente em `DEBLOAT.cmd`:
 
 ```powershell
 Enabled          = $true
@@ -230,6 +225,6 @@ AppRemovalTarget = 'AllUsers'
 RemoveGamingApps = $false
 ```
 
-O ZIP da tag exige o SHA-256 versionado e a aplicação exige `-ConfirmReviewed`. Edge não é removido e o parâmetro de remoção de Xbox/Game Bar não é enviado.
+O ZIP da tag exige o SHA-256 versionado. A confirmação `S` do plano da instalação autoriza a etapa; `DEBLOAT.cmd` solicita uma confirmação própria. Edge não é removido e o parâmetro de remoção de Xbox/Game Bar não é enviado.
 
 O debloat é uma exceção intencional à política `latest`: como executa remoções e muda configurações do Windows, uma nova release só deve substituir a versão fixada depois de revisão e atualização do SHA-256.

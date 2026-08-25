@@ -12,10 +12,11 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $root 'config\machine.psd1' }
 $configPath = [IO.Path]::GetFullPath($Config)
-$bootstrapPath = Join-Path $root 'bootstrap.ps1'
-$verifyPath = Join-Path $root 'verify.ps1'
+$bootstrapPath = Join-Path $PSScriptRoot 'bootstrap.ps1'
+$verifyPath = Join-Path $PSScriptRoot 'verify.ps1'
 $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $operation = if ($LauncherName -eq 'INSTALAR.cmd') { 'Instalacao' } else { 'Atualizacao' }
+$includeDebloat = $LauncherName -eq 'INSTALAR.cmd'
 
 function Test-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -103,11 +104,11 @@ try {
     if (Test-Path -LiteralPath $applyStatePath -PathType Leaf) {
         $state = Get-Content -Raw -LiteralPath $applyStatePath | ConvertFrom-Json
         Write-Host "Retomando a instalacao na etapa: $($state.Stage)." -ForegroundColor Yellow
-        & $bootstrapPath -Config $configPath -Apply
+        & $bootstrapPath -Config $configPath -Apply -IncludeDebloat:$includeDebloat -ConfirmDebloatReviewed:$includeDebloat
     }
     else {
         Write-Host 'Primeiro sera mostrado o plano. Nenhuma configuracao do Windows sera alterada nessa etapa.' -ForegroundColor Gray
-        & $bootstrapPath -Config $configPath -Plan
+        & $bootstrapPath -Config $configPath -Plan -IncludeDebloat:$includeDebloat
 
         Write-Host ''
         $answer = Read-Host "Conferiu o plano e quer iniciar a $($operation.ToLowerInvariant())? Digite S para continuar"
@@ -118,7 +119,7 @@ try {
             exit 0
         }
 
-        & $bootstrapPath -Config $configPath -Apply
+        & $bootstrapPath -Config $configPath -Apply -IncludeDebloat:$includeDebloat -ConfirmDebloatReviewed:$includeDebloat
     }
 
     if (Test-Path -LiteralPath $applyStatePath -PathType Leaf) {

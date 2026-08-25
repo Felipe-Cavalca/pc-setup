@@ -14,20 +14,23 @@ Isso aplica os ajustes e a seleção padrão de aplicativos da release para todo
 
 O preset padrão inclui mudanças de privacidade, sugestões, pesquisa e recursos de IA, além da lista padrão de aplicativos da ferramenta. A lista exata fica em `Config/Apps.json` e `Config/DefaultSettings.json` da tag fixada.
 
-## Executar
+## Durante a instalação
 
-O debloat permanece separado do bootstrap principal porque remove aplicativos e muda diversas preferências. Depois de concluir o setup base, leia esta página e execute em Windows PowerShell 5.1 como Administrador:
+Quando `Debloat.Enabled = $true`, `INSTALAR.cmd` inclui esta etapa no plano exibido antes da confirmação. Ao digitar `S`, a aplicação reutiliza a mesma elevação e o mesmo ponto de restauração da instalação. `ATUALIZAR.cmd` não repete o debloat automaticamente.
 
-```powershell
-.\scripts\50-debloat-akita.ps1 -Config .\config\machine.psd1 -Plan
-.\scripts\50-debloat-akita.ps1 -Config .\config\machine.psd1 -Apply -ConfirmReviewed
+## Executar separadamente
+
+Para planejar e reaplicar o mesmo perfil depois, execute na raiz:
+
+```text
+DEBLOAT.cmd
 ```
 
-A aplicação cria e valida um ponto de restauração antes do download. Por causa do limite do Windows para `Checkpoint-Computer`, pode ser necessário aguardar o intervalo de 24 horas depois do ponto criado pelo setup base.
+O launcher mostra o plano, pede `S`, solicita elevação e cria um ponto de restauração antes do download. Por causa do limite do Windows para `Checkpoint-Computer`, pode ser necessário aguardar 24 horas depois de outro ponto criado fora da mesma instalação.
 
 ## Depois
 
-Reinicie e teste Windows Update, Microsoft Store, Defender, pesquisa, menu Iniciar, Edge e jogos. Execute `verify.ps1` novamente.
+Reinicie e teste Windows Update, Microsoft Store, Defender, pesquisa, menu Iniciar, Edge e jogos. Execute `VERIFICAR.cmd` novamente.
 
 Referências oficiais:
 

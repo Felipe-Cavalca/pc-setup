@@ -7,7 +7,7 @@ $root = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $root 'config\machine.psd1' }
 $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $testSuitePath = Join-Path $root 'tests\run-all.ps1'
-$verifyPath = Join-Path $root 'verify.ps1'
+$verifyPath = Join-Path $root 'scripts\verify.ps1'
 $wslVerifyPath = Join-Path $root 'wsl\verify.ps1'
 
 Import-Module (Join-Path $PSScriptRoot 'lib\PcSetup.Core.psm1') -Force

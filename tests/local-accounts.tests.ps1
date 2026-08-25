@@ -8,7 +8,7 @@ function Assert-Contains([string]$Content, [string]$Pattern, [string]$Message) {
 }
 
 $users = Get-Content -LiteralPath (Join-Path $root 'scripts\30-users.ps1') -Raw
-$verify = Get-Content -LiteralPath (Join-Path $root 'verify.ps1') -Raw
+$verify = Get-Content -LiteralPath (Join-Path $root 'scripts\verify.ps1') -Raw
 $orchestrator = Get-Content -LiteralPath (Join-Path $root 'scripts\Start-PcSetupUpdate.ps1') -Raw
 
 Assert-Contains $users "Get-LocalGroup\s+-SID\s+'S-1-5-32-545'" 'A reconciliacao deve resolver o grupo Usuarios por SID.'

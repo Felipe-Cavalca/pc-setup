@@ -919,8 +919,6 @@ function Get-PcSetupProjectFingerprint {
     param([Parameter(Mandatory)][hashtable]$Configuration)
 
     $files = @(
-        (Join-Path $Configuration._ProjectRoot 'bootstrap.ps1'),
-        (Join-Path $Configuration._ProjectRoot 'verify.ps1'),
         $Configuration._ConfigPath,
         (Resolve-PcSetupProjectPath -Configuration $Configuration -Value ([string]$Configuration.Packages.OfflineManifest) -SettingName 'Packages.OfflineManifest')
     )

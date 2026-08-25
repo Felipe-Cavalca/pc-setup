@@ -15,23 +15,7 @@ Na instalação inicial, o caminho recomendado é executar `INSTALAR.cmd` na con
 
 Se pacotes, personalização ou WSL falharem depois que o Windows já tiver sido concluído e validado, execute novamente o mesmo arquivo. O orquestrador retoma as fases da conta diária quando encontra um relatório Windows concluído com os mesmos hashes de configuração e projeto.
 
-Para aplicar manualmente, depois que o bootstrap principal terminar e o Windows tiver sido reiniciado, abra o Windows PowerShell 5.1 sem elevação na raiz do projeto.
-
-Aplique primeiro o perfil diário:
-
-```powershell
-.\wsl\bootstrap.ps1 -Environment DailyUser -Plan
-.\wsl\bootstrap.ps1 -Environment DailyUser -Apply
-.\wsl\verify.ps1 -Environment DailyUser
-```
-
-Depois aplique o perfil do agente:
-
-```powershell
-.\wsl\bootstrap.ps1 -Environment Agent -Plan
-.\wsl\bootstrap.ps1 -Environment Agent -Apply
-.\wsl\verify.ps1 -Environment Agent
-```
+`INSTALAR.cmd`, `ATUALIZAR.cmd` e `VERIFICAR.cmd`, todos na raiz, são as entradas suportadas para aplicar e conferir esses ambientes. Os scripts desta pasta são complementos internos usados pelos launchers na ordem correta.
 
 O segundo perfil reutiliza a distribuição, cria `agent`, bloqueia sua senha, remove participação em `sudo`, `wheel`, `docker` ou `lxd`, recusa regras diretas em sudoers, cria o workspace compartilhado e instala o harness configurado. No padrão, são usadas as versões estáveis atuais do `ai-jail`, do `ai-memory` e de `@openai/codex`; ele não muda o usuário padrão do Ubuntu.
 
@@ -68,10 +52,10 @@ ai-memory finalize-session
 
 O segundo comando é manual porque o Codex ainda não oferece um evento confiável de encerramento real e podem existir sessões concorrentes no mesmo projeto. Para importar o contexto histórico de um repositório, comece com `ai-memory bootstrap --dry-run`; o setup não executa o bootstrap real porque ele pode consumir um provedor pago e o conteúdo inferido precisa ser revisado.
 
-Para executar manualmente outro comando instalado:
+Para executar manualmente outro comando instalado, use o launcher da raiz, que repassa os parâmetros ao fluxo interno:
 
 ```powershell
-.\scripts\Start-Agent.ps1 -ProjectPath D:\Dev\projeto -Command claude
+.\AGENTE.cmd -ProjectPath D:\Dev\projeto -Command claude
 ```
 
 ## Onde guardar projetos

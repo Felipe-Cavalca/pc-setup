@@ -45,7 +45,7 @@ $linuxVerify = Get-Content -LiteralPath (Join-Path $root 'wsl\linux\verify.sh') 
 $agentLauncher = Get-Content -LiteralPath (Join-Path $root 'scripts\Start-Agent.ps1') -Raw
 $userPhase = Get-Content -LiteralPath (Join-Path $root 'scripts\90-user-profile.ps1') -Raw
 $orchestrator = Get-Content -LiteralPath (Join-Path $root 'scripts\Start-PcSetupUpdate.ps1') -Raw
-$machineBootstrap = Get-Content -LiteralPath (Join-Path $root 'bootstrap.ps1') -Raw
+$machineBootstrap = Get-Content -LiteralPath (Join-Path $root 'scripts\bootstrap.ps1') -Raw
 $workflow = Get-Content -LiteralPath (Join-Path $root '.github\workflows\ci.yml') -Raw
 
 Assert-True ($releaseHelper -match '/releases/latest' -and $releaseHelper -match '\.digest' -and $releaseHelper -match 'sha256:') 'A release atual deve ser resolvida com digest pela API do GitHub.'

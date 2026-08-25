@@ -41,7 +41,7 @@ try {
     Assert-True ($html -match 'Example\.&lt;Tool&gt;' -and $html -notmatch 'Example\.<Tool>') 'O HTML deve escapar os dados do plano.'
     Assert-True ($markdown -match 'Instalar ou atualizar' -and $markdown.Contains($jsonPath)) 'O Markdown deve ser legivel e apontar para o JSON tecnico.'
 
-    $bootstrap = Get-Content -LiteralPath (Join-Path $root 'bootstrap.ps1') -Raw -Encoding UTF8
+    $bootstrap = Get-Content -LiteralPath (Join-Path $root 'scripts\bootstrap.ps1') -Raw -Encoding UTF8
     $launcher = Get-Content -LiteralPath (Join-Path $root 'scripts\Start-PcSetup.ps1') -Raw -Encoding UTF8
     Assert-True ($bootstrap -match 'Write-PcSetupPlanSummaryFiles' -and $bootstrap -match 'ReadableReports') 'O bootstrap deve gerar o resumo depois do JSON e registrar os caminhos no recibo.'
     Assert-True ($launcher -match 'PC_SETUP_CALLER_DESKTOP') 'O fluxo elevado deve preservar a Area de Trabalho da conta que iniciou o launcher.'

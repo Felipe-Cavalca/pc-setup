@@ -36,11 +36,11 @@ Para testar a pergunta sobre um segundo disco, conecte um segundo VHDX à VM e, 
 5. Crie um checkpoint da VM.
 6. Copie para a VM exatamente a revisão do repositório que será testada.
 7. Revise `config\machine.psd1`, principalmente contas, disco, pacotes e recursos.
-8. Execute `tests\run-all.ps1` no Windows PowerShell 5.1.
+8. Execute `TESTAR.cmd` na raiz do projeto.
 9. Dê duplo clique em `INSTALAR.cmd`, confira o plano e confirme apenas se estiver correto.
 10. Quando solicitado, reinicie e execute `INSTALAR.cmd` novamente.
-11. Confirme que Windows, WSL, usuário Linux diário, `agent` e o serviço `ai-memory` foram validados.
-12. Na conta diária, execute `TESTAR-INTEGRACAO.cmd`; forneça a credencial administrativa somente ao UAC do `verify.ps1` e confira o relatório `integration-test-*.json` indicado no final.
+11. Confirme que o debloat configurado foi aplicado e que Windows, WSL, usuário Linux diário, `agent` e o serviço `ai-memory` foram validados.
+12. Na conta diária, execute `TESTAR-INTEGRACAO.cmd`; forneça a credencial administrativa somente ao UAC da verificação e confira o relatório `integration-test-*.json` indicado no final.
 13. Execute `AGENTE.cmd`, escolha um projeto descartável e confirme que o agente enxerga somente o workspace liberado e encontra as ferramentas MCP do `ai-memory`.
 14. Altere uma opção não destrutiva da configuração e execute `ATUALIZAR.cmd` para validar a reconciliação.
 
