@@ -55,6 +55,10 @@ jobs:
           bash -n wsl/linux/bootstrap.sh
           bash -n wsl/linux/verify.sh
           bash -n wsl/linux/github-release.sh
+          bash -n tests/wsl-link-resolution.tests.sh
 
       - name: Analisar Bash
-        run: shellcheck wsl/linux/bootstrap.sh wsl/linux/verify.sh wsl/linux/github-release.sh
+        run: shellcheck wsl/linux/bootstrap.sh wsl/linux/verify.sh wsl/linux/github-release.sh tests/wsl-link-resolution.tests.sh
+
+      - name: Testar resolução dos links do harness
+        run: bash tests/wsl-link-resolution.tests.sh

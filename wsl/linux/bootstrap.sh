@@ -477,8 +477,10 @@ if [[ -n $harness_command ]]; then
     printf 'Harness version mismatch: configured=%s installed=%s\n' "$harness_version" "$harness_actual_version" >&2
     exit 1
   fi
-  if ! runuser --user "$linux_user" -- env HOME="/home/$linux_user" "$harness_launcher" --version >/dev/null 2>&1; then
-    printf 'Harness command failed after install: %s\n' "$harness_command" >&2
+  harness_command_output=''
+  if ! harness_command_output="$(runuser --user "$linux_user" -- env HOME="/home/$linux_user" "$harness_launcher" --version 2>&1)"; then
+    harness_command_output="${harness_command_output//$'\n'/ }"
+    printf 'Harness command failed after install: %s; output=%s\n' "$harness_command" "${harness_command_output:-missing}" >&2
     exit 1
   fi
 fi

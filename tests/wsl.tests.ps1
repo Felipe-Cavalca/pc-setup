@@ -165,6 +165,8 @@ Assert-True ($releaseHelper -match '/releases/latest' -and $releaseHelper -match
 Assert-True ($bootstrapLinux -match 'ai-memory-linux-' -and $bootstrapLinux -match 'ai-memory install-mcp' -and $bootstrapLinux -match 'ai-memory install-hooks' -and $bootstrapLinux -match 'pc-setup-ai-memory-' -and $verifyLinux -match 'ai_memory_binary_sha256' -and $verifyLinux -match 'ai-memory health') 'O bootstrap e o verify devem instalar, integrar e validar o ai-memory.'
 Assert-True ($bootstrapLinux -match 'AI_MEMORY_AUTH_TOKEN' -and $bootstrapLinux -match 'chmod 0600' -and $verifyLinux -match 'config_mode == 600') 'O token e a configuracao local do ai-memory devem permanecer protegidos.'
 Assert-True ($bootstrapLinux -match 'npm install --global' -and $bootstrapLinux -match 'harness_version' -and $verifyLinux -match 'Agent harness') 'O bootstrap deve instalar o harness e o verify deve conferir sua versao real.'
+Assert-True ($bootstrapLinux -match 'Harness command failed after install:.*output=' -and $verifyLinux -match 'harness_command_output') 'Bootstrap e verify devem preservar a falha real do comando do harness.'
+Assert-True ($verifyLinux -match 'harness_binary_target' -and $verifyLinux -match 'launcher_target == "\$harness_binary_target"' -and $verifyLinux -match 'npm list.*\| jq.*\|\| true') 'O verify deve comparar os destinos canonicos da cadeia de links NPM e relatar pacote ausente sem encerrar prematuramente.'
 
 $wslModule = Get-Content -LiteralPath (Join-Path $root 'wsl\PcSetup.Wsl.psm1') -Raw
 Assert-True ($wslModule -match 'Get-PcSetupWslInstalledState' -and $bootstrapPowerShell -match 'InstalledState') 'Os relatorios WSL devem registrar as versoes realmente instaladas.'
