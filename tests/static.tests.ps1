@@ -46,11 +46,22 @@ Assert-True (@($basePackages | Where-Object { $_ -match 'Discord|Spotify|WhatsAp
 
 $launcher = Get-Content -Raw -LiteralPath (Join-Path $root 'INSTALAR.cmd')
 Assert-True ($launcher -match 'Start-PcSetupUpdate\.ps1' -and $launcher -match '-LauncherName INSTALAR\.cmd') 'O instalador deve chamar o orquestrador completo.'
+$debloatLauncher = Get-Content -Raw -LiteralPath (Join-Path $root 'DEBLOAT.cmd')
+Assert-True ($debloatLauncher -match 'Start-Debloat\.ps1') 'O debloat independente deve possuir launcher na raiz.'
+$verifyLauncher = Get-Content -Raw -LiteralPath (Join-Path $root 'VERIFICAR.cmd')
+Assert-True ($verifyLauncher -match 'Start-Verify\.ps1') 'A verificacao manual deve possuir launcher na raiz.'
+$verifyFlow = Get-Content -Raw -LiteralPath (Join-Path $root 'scripts\Start-Verify.ps1')
+Assert-True ($verifyFlow -match 'PassThru' -and $verifyFlow -match 'Pressione ENTER para fechar' -and $verifyFlow -match '-Verb RunAs') 'O launcher de verificacao deve elevar e manter o resultado visivel.'
 $assistedScript = Get-Content -Raw -LiteralPath (Join-Path $root 'scripts\Start-PcSetup.ps1')
 Assert-True ($assistedScript -match 'bootstrap\.ps1' -and $assistedScript -match 'verify\.ps1') 'O fluxo assistido deve executar plano, aplicacao e verificacao.'
 $agentLauncher = Get-Content -Raw -LiteralPath (Join-Path $root 'AGENTE.cmd')
-Assert-True ($agentLauncher -match 'Start-Agent\.ps1') 'O launcher do agente deve chamar o fluxo WSL isolado.'
+Assert-True ($agentLauncher -match 'Start-Agent\.ps1' -and $agentLauncher -match '%\*') 'O launcher do agente deve chamar o fluxo WSL isolado e aceitar parametros opcionais.'
+$testLauncher = Get-Content -Raw -LiteralPath (Join-Path $root 'TESTAR.cmd')
+Assert-True ($testLauncher -match 'tests\\run-all\.ps1') 'A suite local deve possuir launcher na raiz.'
 $updateLauncher = Get-Content -Raw -LiteralPath (Join-Path $root 'ATUALIZAR.cmd')
 Assert-True ($updateLauncher -match 'Start-PcSetupUpdate\.ps1') 'O atualizador deve chamar o fluxo de reconciliacao.'
+Assert-True (@(Get-ChildItem -LiteralPath $root -File -Filter '*.ps1').Count -eq 0) 'Scripts PowerShell complementares nao devem permanecer na raiz.'
+$coreModule = Get-Content -Raw -LiteralPath (Join-Path $root 'scripts\lib\PcSetup.Core.psm1')
+Assert-True ($coreModule -notmatch "_ProjectRoot 'bootstrap\.ps1'|_ProjectRoot 'verify\.ps1'" -and $coreModule -match 'Join-Path \$Configuration\._ProjectRoot ''scripts''') 'A impressao digital deve cobrir os scripts movidos sem esperar complementos na raiz.'
 
 Write-Host 'PASS: sintaxe e invariantes de seguranca.' -ForegroundColor Green

@@ -6,14 +6,15 @@ function Assert-Contains([string]$Content, [string]$Pattern, [string]$Message) {
     if ($Content -notmatch $Pattern) { throw $Message }
 }
 
-$verify = Get-Content -LiteralPath (Join-Path $root 'verify.ps1') -Raw
-$bootstrap = Get-Content -LiteralPath (Join-Path $root 'bootstrap.ps1') -Raw
+$verify = Get-Content -LiteralPath (Join-Path $root 'scripts\verify.ps1') -Raw
+$bootstrap = Get-Content -LiteralPath (Join-Path $root 'scripts\bootstrap.ps1') -Raw
 $packages = Get-Content -LiteralPath (Join-Path $root 'scripts\60-packages.ps1') -Raw
 $personalization = Get-Content -LiteralPath (Join-Path $root 'scripts\80-personalization.ps1') -Raw
 
 Assert-Contains $bootstrap 'Recovery\s+=\s+\$null' 'O relatorio base deve reservar o comprovante de recuperacao.'
 Assert-Contains $bootstrap '\$baseReport\.Recovery\s*=' 'O Apply deve registrar o ponto de restauracao validado.'
 Assert-Contains $verify 'Configuracao aplicada' 'O verify deve comparar a configuracao aplicada.'
+Assert-Contains $verify '\[switch\]\$PassThru' 'O verify deve permitir que o launcher elevado preserve e classifique o resultado.'
 Assert-Contains $verify 'Versao do projeto aplicada' 'O verify deve detectar mudanca do projeto apos o Apply.'
 Assert-Contains $verify 'FileSystemRights\]\$grant\.Rights' 'O verify deve validar os direitos exatos das ACLs.'
 Assert-Contains $verify 'allowedRights.+FileSystemRights\]::Synchronize' 'O verify deve aceitar apenas o bit Synchronize acrescentado canonicamente pelo Windows.'

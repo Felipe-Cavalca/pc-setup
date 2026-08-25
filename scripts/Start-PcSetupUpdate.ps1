@@ -132,6 +132,9 @@ try {
 
     Write-Host "=== pc-setup: $($operation.ToLowerInvariant()) e reconciliacao ===" -ForegroundColor Cyan
     Write-Host 'O Windows e os ambientes WSL habilitados serao planejados, aplicados e validados.'
+    if ($LauncherName -eq 'INSTALAR.cmd' -and $configuration.Debloat.Enabled) {
+        Write-Host 'O debloat configurado faz parte do plano desta instalacao.'
+    }
     Write-Host ''
 
     $environments = @()
