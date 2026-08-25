@@ -413,8 +413,10 @@ if [[ -n $harness_command ]]; then
   harness_launcher="/usr/local/bin/$harness_command"
   harness_binary="$npm_prefix/bin/$harness_command"
   launcher_target=''
-  if [[ -L $harness_launcher ]]; then launcher_target="$(readlink --canonicalize-missing -- "$harness_launcher")"; fi
-  actual_version="$(runuser --user "$linux_user" -- env HOME="/home/$linux_user" npm list --global --prefix "$npm_prefix" --depth 0 --json "$harness_package" 2>/dev/null | jq --raw-output --arg package "$harness_package" '.dependencies[$package].version // empty')"
+  harness_binary_target=''
+  if [[ -L $harness_launcher ]]; then launcher_target="$(readlink --canonicalize-missing -- "$harness_launcher" 2>/dev/null || true)"; fi
+  if [[ -e $harness_binary ]]; then harness_binary_target="$(readlink --canonicalize-missing -- "$harness_binary" 2>/dev/null || true)"; fi
+  actual_version="$(runuser --user "$linux_user" -- env HOME="/home/$linux_user" npm list --global --prefix "$npm_prefix" --depth 0 --json "$harness_package" 2>/dev/null | jq --raw-output --arg package "$harness_package" '.dependencies[$package].version // empty' 2>/dev/null || true)"
   recorded_command=''
   recorded_package=''
   recorded_policy=''
@@ -427,13 +429,18 @@ if [[ -n $harness_command ]]; then
   fi
   fixed_version_ok=1
   if [[ $harness_version != latest && $actual_version != "$harness_version" ]]; then fixed_version_ok=0; fi
-  if [[ -x $harness_binary && $launcher_target == "$harness_binary" && $actual_version == "$recorded_version" &&
+  harness_command_ok=0
+  harness_command_output=''
+  if harness_command_output="$(runuser --user "$linux_user" -- env HOME="/home/$linux_user" "$harness_launcher" --version 2>&1)"; then
+    harness_command_ok=1
+  fi
+  harness_command_output="${harness_command_output//$'\n'/ }"
+  if [[ -x $harness_binary && -n $harness_binary_target && $launcher_target == "$harness_binary_target" && $actual_version == "$recorded_version" &&
         $recorded_command == "$harness_command" && $recorded_package == "$harness_package" &&
-        $recorded_policy == "$harness_version" && $fixed_version_ok == 1 ]] &&
-     runuser --user "$linux_user" -- env HOME="/home/$linux_user" "$harness_launcher" --version >/dev/null 2>&1; then
+        $recorded_policy == "$harness_version" && $fixed_version_ok == 1 && $harness_command_ok == 1 ]]; then
     check 'Agent harness' 1 "$harness_package $actual_version; command=$harness_command"
   else
-    check 'Agent harness' 0 "package=$harness_package; installed=${actual_version:-missing}; recorded=${recorded_version:-missing}; command=$harness_command"
+    check 'Agent harness' 0 "package=$harness_package; installed=${actual_version:-missing}; recorded=${recorded_version:-missing}; command=$harness_command; launcher=${launcher_target:-missing}; expected=${harness_binary_target:-missing}; command_ok=$harness_command_ok; output=${harness_command_output:-missing}"
   fi
 fi
 

@@ -66,6 +66,8 @@ Se `DailyUser` passar e o ambiente `Agent` terminar com `Unknown argument: true`
 
 Se a reconciliação do `Agent` for interrompida mostrando apenas uma linha informativa como `INFO ai_memory: ai-memory starting`, o serviço provavelmente iniciou corretamente, mas uma versão antiga do módulo PowerShell interpretou o `stderr` como exceção antes de consultar o código de saída. Atualize o projeto e execute `ATUALIZAR.cmd` novamente. A correção preserva o texto no diagnóstico e considera sucesso somente quando o processo nativo retorna código `0`.
 
+Se todos os itens do `Agent` passarem, mas `Agent harness` mostrar a mesma versão em `installed` e `recorded`, atualize o projeto para uma versão que compare os destinos canônicos da cadeia de links criada pelo NPM. O Codex já foi instalado; execute `ATUALIZAR.cmd` novamente para refazer somente a verificação. Versões corrigidas também mostram `launcher`, `expected`, `command_ok` e `output` quando houver uma falha real do executável.
+
 Antes de mudanças importantes em uma distribuição existente:
 
 ```powershell

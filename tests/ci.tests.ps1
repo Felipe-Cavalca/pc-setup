@@ -25,6 +25,7 @@ Assert-Contains $workflow 'tests\\run-all\.ps1' 'A CI deve executar a suite comp
 Assert-Contains $workflow 'actions/checkout@[0-9a-f]{40}\s+#\s+v[0-9]+\.[0-9]+\.[0-9]+' 'Actions externas devem ser fixadas por SHA completo com a versao legivel.'
 if ($workflow -match 'uses:\s+[^\s]+@(v|main|master)') { throw 'A CI nao pode usar referencia mutavel de Action.' }
 Assert-Contains $workflow 'bash -n wsl/linux/bootstrap\.sh' 'A CI deve validar o bootstrap Bash.'
+Assert-Contains $workflow 'bash tests/wsl-link-resolution\.tests\.sh' 'A CI deve reproduzir a cadeia de links criada pelo NPM.'
 Assert-Contains $dependabot 'package-ecosystem:\s+github-actions' 'Dependabot deve acompanhar as GitHub Actions.'
 Assert-Contains $dependabot 'interval:\s+weekly' 'Atualizacoes das Actions devem ser verificadas semanalmente.'
 Assert-Contains $validator 'Import-PowerShellDataFile' 'A CI deve importar e validar os arquivos PSD1.'
