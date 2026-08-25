@@ -16,7 +16,7 @@ O perfil versionado:
 
 - usa o tema escuro;
 - oculta a caixa de pesquisa e o botão Visão de Tarefas;
-- desabilita consultas, resultados e sugestões da web na pesquisa do Windows;
+- desabilita consultas, resultados e destaques da web na pesquisa do Windows;
 - limpa os aplicativos fixados no menu Iniciar e mantém a possibilidade de fixar itens depois;
 - seleciona a visualização “Todos” em categorias;
 - deixa somente Configurações junto ao botão de energia;
@@ -25,7 +25,7 @@ O perfil versionado:
 - remove o aplicativo LinkedIn do perfil diário;
 - não remove Vincular ao Celular nem o componente Cross Device.
 
-As políticas `StartupBoostEnabled` e `BackgroundModeEnabled` do Edge são aplicadas na fase administrativa em `HKLM`. A fase da conta diária apenas remove entradas de inicialização do próprio perfil; ela não tenta gravar na área protegida `HKCU\Software\Policies`.
+As políticas `StartupBoostEnabled` e `BackgroundModeEnabled` do Edge são aplicadas na fase administrativa em `HKLM`. A pesquisa web usa `DisableWebSearch`, `ConnectedSearchUseWeb` e `EnableDynamicContentInWSB`, também em `HKLM`. A fase da conta diária apenas remove entradas de inicialização do próprio perfil; ela não tenta gravar na área protegida `HKCU\Software\Policies`.
 
 A verificação da fase Windows não exige antecipadamente as políticas de personalização. Depois dessa verificação, `82-personalization-machine.ps1` cria e confirma em `HKLM` as políticas do Edge e da pesquisa web; em seguida, a fase da conta diária aplica e valida as configurações de `HKCU`. Assim, uma instalação nova não falha apenas porque a personalização ainda não chegou ao seu ponto de execução.
 

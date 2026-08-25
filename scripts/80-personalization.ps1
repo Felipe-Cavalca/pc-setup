@@ -254,7 +254,7 @@ $planActions = @(
     'Remover OneDrive e pacotes Appx configurados',
     'Preservar Vincular ao Celular e Cross Device'
 )
-if ($personalization.DisableWebSearch) { $planActions += 'Remover consultas, resultados e sugestoes da web da pesquisa do Windows' }
+if ($personalization.DisableWebSearch) { $planActions += 'Remover consultas, resultados e destaques da web da pesquisa do Windows' }
 if ($personalization.RedirectKnownFolders) { $planActions += "Redirecionar pastas pessoais para Storage.Paths.$($personalization.KnownFoldersPathKey), copiando o conteudo sem apagar a origem" }
 if ($personalization.RestoreKnownFoldersToProfile) { $planActions += 'Restaurar as pastas pessoais para o perfil padrao do Windows, copiando o conteudo sem apagar a origem antiga' }
 if ($personalization.ProfileLink.Enabled) { $planActions += "Criar a juncao $($personalization.ProfileLink.Name) para o perfil original do Windows" }
@@ -295,14 +295,6 @@ $actions += "Theme:$($personalization.Theme)"
 Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -Value $(if ($personalization.HideTaskbarSearch) { 0 } else { 2 })
 Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'ShowTaskViewButton' -Value $(if ($personalization.HideTaskView) { 0 } else { 1 })
 $actions += 'Taskbar'
-
-if ($personalization.DisableWebSearch) {
-    $searchPolicyPath = 'HKCU:\Software\Policies\Microsoft\Windows\Explorer'
-    Set-PcSetupDword -Path $searchPolicyPath -Name 'DisableSearchBoxSuggestions' -Value 1
-    $confirmedWebSearchPolicy = [int](Get-ItemPropertyValue -LiteralPath $searchPolicyPath -Name 'DisableSearchBoxSuggestions' -ErrorAction Stop)
-    if ($confirmedWebSearchPolicy -ne 1) { throw 'A desativacao das sugestoes web da pesquisa nao foi confirmada no perfil.' }
-    $actions += 'WebSearchDisabled'
-}
 
 $allAppsViewMode = @{ Category = 0; Grid = 1; List = 2 }[[string]$personalization.StartAllAppsView]
 Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Start' -Name 'AllAppsViewMode' -Value $allAppsViewMode

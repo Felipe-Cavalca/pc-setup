@@ -78,7 +78,7 @@ try {
     if ($personalization.DisableWebSearch) {
         $searchPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search'
         if (-not (Test-Path -LiteralPath $searchPolicyPath)) { New-Item -Path $searchPolicyPath -Force | Out-Null }
-        $searchPolicies = @{ DisableWebSearch = 1; ConnectedSearchUseWeb = 0 }
+        $searchPolicies = @{ DisableWebSearch = 1; ConnectedSearchUseWeb = 0; EnableDynamicContentInWSB = 0 }
         foreach ($searchPolicyName in $searchPolicies.Keys) {
             New-ItemProperty -LiteralPath $searchPolicyPath -Name $searchPolicyName -PropertyType DWord -Value $searchPolicies[$searchPolicyName] -Force | Out-Null
             $actual = [int](Get-ItemPropertyValue -LiteralPath $searchPolicyPath -Name $searchPolicyName -ErrorAction Stop)
