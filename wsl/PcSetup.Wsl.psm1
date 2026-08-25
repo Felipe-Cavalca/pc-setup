@@ -121,17 +121,19 @@ function Invoke-PcSetupWslLinuxScript {
         $arguments += @(
             '--ai-jail-repository', [string]$Profile.AiJail.Repository,
             '--ai-jail-version', [string]$Profile.AiJail.Version,
-            '--ai-jail-architecture', [string]$Profile.AiJail.Architecture,
-            '--ai-jail-sha256', [string]$Profile.AiJail.Sha256,
-            '--ai-jail-require-asset-digest', ([string][bool]$Profile.AiJail.RequireAssetDigest).ToLowerInvariant()
+            '--ai-jail-architecture', [string]$Profile.AiJail.Architecture
         )
+        if (-not [string]::IsNullOrWhiteSpace([string]$Profile.AiJail.Sha256)) { $arguments += @('--ai-jail-sha256', [string]$Profile.AiJail.Sha256) }
+        $arguments += @('--ai-jail-require-asset-digest', ([string][bool]$Profile.AiJail.RequireAssetDigest).ToLowerInvariant())
     }
     if ($Profile.ContainsKey('AiMemory') -and $Profile.AiMemory.Enabled) {
         $arguments += @(
             '--ai-memory-repository', [string]$Profile.AiMemory.Repository,
             '--ai-memory-version', [string]$Profile.AiMemory.Version,
-            '--ai-memory-architecture', [string]$Profile.AiMemory.Architecture,
-            '--ai-memory-sha256', [string]$Profile.AiMemory.Sha256,
+            '--ai-memory-architecture', [string]$Profile.AiMemory.Architecture
+        )
+        if (-not [string]::IsNullOrWhiteSpace([string]$Profile.AiMemory.Sha256)) { $arguments += @('--ai-memory-sha256', [string]$Profile.AiMemory.Sha256) }
+        $arguments += @(
             '--ai-memory-require-asset-digest', ([string][bool]$Profile.AiMemory.RequireAssetDigest).ToLowerInvariant(),
             '--ai-memory-client', [string]$Profile.AiMemory.Client,
             '--ai-memory-project-strategy', [string]$Profile.AiMemory.ProjectStrategy,
@@ -144,6 +146,9 @@ function Invoke-PcSetupWslLinuxScript {
             '--harness-package', [string]$Profile.Harness.Package,
             '--harness-version', [string]$Profile.Harness.Version
         )
+    }
+    if (@($arguments | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) {
+        throw 'O bootstrap WSL montou um argumento vazio. Revise o perfil antes de chamar o executavel nativo.'
     }
     $output = @(& $WslCommand --distribution $Distribution --user root --exec bash -- $ScriptPath @arguments 2>&1)
     $exitCode = $LASTEXITCODE

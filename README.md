@@ -25,6 +25,7 @@ Para uma instalação começando pelo pendrive, use o guia completo em [`imagem-
 - resolve as releases estáveis atuais do `ai-jail` e do `ai-memory`, exige os digests SHA-256 publicados pelo GitHub, instala/atualiza o Codex e fornece um launcher isolado com memória local;
 - permite que o usuário diário administre o Hyper-V sem torná-lo administrador geral do Windows;
 - gera relatórios JSON de plano, aplicação, versões instaladas pelo Winget e validação;
+- registra cada instalação, atualização e teste integral em log JSONL cronológico e sanitizado;
 - atualiza na Área de Trabalho uma cópia legível do plano em HTML e Markdown antes de pedir confirmação;
 - registra um snapshot local das versões conhecidas como boas para uma reinstalação reproduzível;
 - prepara backup local verificável, cuja cópia para outro disco é disparada manualmente;
@@ -127,6 +128,8 @@ O plano apresenta:
 - estado do debloat separado.
 
 Na aplicação, cada etapa mostra `OK`, `CRIADO`, `APLICAR`, `WINGET`, `OFFLINE`, `RECOVERY` ou uma mensagem de erro. Códigos de erro de ferramentas externas são tratados como falha.
+
+Quando `Runtime.ExecutionLogEnabled = $true`, o orquestrador também mostra o caminho de um arquivo `execution-*.jsonl` em `%LOCALAPPDATA%\pc-setup\reports`. Cada linha registra horário, etapa, resultado, ferramenta e argumentos seguros. Campos e argumentos reconhecidos como senha, token, credencial, chave ou PIN são substituídos por `[REDACTED]`; a transcrição bruta do terminal não é gravada.
 
 ## Armazenamento
 
@@ -276,6 +279,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\run-all.ps1
 ```
 
 A CI executa a mesma suíte em Windows PowerShell 5.1, valida PowerShell e PSD1, roda o PSScriptAnalyzer e verifica os scripts WSL com `bash -n` e ShellCheck.
+
+Depois de uma instalação completa em VM ou máquina real, entre na conta diária e execute `TESTAR-INTEGRACAO.cmd`. Ele automatiza a suíte do projeto, solicita UAC para o `verify.ps1` somente leitura e valida os ambientes WSL aplicáveis, gerando `integration-test-*.json`. A criação da VM, os reinícios e a comprovação visual do primeiro logon continuam no roteiro manual porque não são reproduzíveis com segurança nos runners hospedados do GitHub.
 
 Consulte também [`SECURITY.md`](SECURITY.md) para o modelo de suporte e reporte de vulnerabilidades. O mantenedor ainda precisa escolher e publicar uma licença antes de declarar permissões de reutilização.
 

@@ -184,7 +184,7 @@ O perfil `wsl\profiles\agent.psd1` declara usuário sem privilégios, workspace 
 
 ## Inventário do Winget
 
-`Runtime.StateDirectory` e `Runtime.ReportDirectory` guardam estado e relatórios elevados em `%ProgramData%`. `UserStateDirectory`, `UserReportDirectory` e `WingetInventoryPath` ficam em `%LOCALAPPDATA%` da conta diária, permitindo que a fase sem elevação registre IDs, versões, fontes e personalização. Esses arquivos são estado local gerado e não devem ser adicionados ao repositório.
+`Runtime.StateDirectory` e `Runtime.ReportDirectory` guardam estado e relatórios elevados em `%ProgramData%`. `UserStateDirectory`, `UserReportDirectory` e `WingetInventoryPath` ficam em `%LOCALAPPDATA%` da conta diária, permitindo que a fase sem elevação registre IDs, versões, fontes e personalização. `ExecutionLogEnabled = $true` mantém um histórico JSONL sanitizado de cada reconciliação e teste integral; ele pode ser desabilitado em outro perfil sem alterar o tratamento de erros. Esses arquivos são estado local gerado e não devem ser adicionados ao repositório.
 
 `Versions.Mode = 'Latest'` busca versões atuais. `CaptureKnownGood = $true` grava um snapshot local após Winget e WSL terminarem validados. `FIXAR-VERSOES.cmd` exporta um arquivo sem segredos para `Versions.LockFile`; com `Mode = 'Locked'`, cada pacote configurado precisa ter uma versão e o Winget recebe `--version`. O modo fixado é destinado principalmente a instalação limpa e não autoriza downgrade automático.
 

@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Baixar o repositorio
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validar PowerShell e PSD1
         shell: powershell
@@ -48,7 +48,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Baixar o repositorio
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validar sintaxe Bash
         run: |

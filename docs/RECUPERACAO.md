@@ -2,6 +2,8 @@
 
 O `pc-setup` interrompe em erro e registra o estado da aplicação, mas não oferece rollback transacional de toda a máquina. Antes de usar em hardware real, mantenha backup dos arquivos pessoais e teste o perfil em VM.
 
+Com `Runtime.ExecutionLogEnabled = $true`, a janela mostra o caminho do log `execution-*.jsonl` em `%LOCALAPPDATA%\pc-setup\reports`. Consulte suas últimas linhas para identificar a etapa e o comando externo que falharam. Valores reconhecidos como senha, token, credencial, chave ou PIN aparecem somente como `[REDACTED]`.
+
 ## O que cada proteção cobre
 
 - ponto de restauração do Windows: arquivos de sistema, Registro, drivers e parte das configurações; não é backup de documentos, discos de VM ou distribuições WSL;
@@ -59,6 +61,8 @@ Conecte a unidade externa somente quando necessário e execute `EXPORTAR-BACKUP.
 ## WSL
 
 Se a instalação mostrar um caminho como `wslpath: C:pc-setup-mainwsllinuxbootstrap.sh`, o Ubuntu já foi instalado; a falha ocorreu somente na conversão do caminho Windows. Use uma versão do projeto que execute `wslpath` por `wsl.exe --exec` e rode novamente `INSTALAR.cmd` ou `ATUALIZAR.cmd` na conta diária. A reconciliação é idempotente e retoma o ambiente, portanto não é necessário recriar a VM nem reinstalar a distribuição.
+
+Se `DailyUser` passar e o ambiente `Agent` terminar com `Unknown argument: true`, atualize o projeto para uma versão que omita argumentos SHA-256 vazios ao chamar o WSL e execute `ATUALIZAR.cmd` novamente. O usuário diário e a distribuição já configurados são reaproveitados; não recrie a VM nem remova o Ubuntu.
 
 Antes de mudanças importantes em uma distribuição existente:
 
