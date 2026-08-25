@@ -228,8 +228,24 @@
     }
 
     Personalization = @{
-        Enabled       = $false
-        WallpaperPath = ''
+        Enabled                  = $true
+        ApplyOnInstall           = $true
+        PromptOnUpdate           = $true
+        Theme                    = 'Dark'
+        HideTaskbarSearch        = $true
+        HideTaskView             = $true
+        ClearStartPins           = $true
+        StartAllAppsView         = 'Category'
+        StartPowerMenuFolders    = @('Settings')
+        DisableEdgeBackground    = $true
+        RemoveOneDrive           = $true
+        RemoveAppxPackages       = @('*LinkedIn*')
+        PreserveAppxPackages     = @('Microsoft.YourPhone', 'MicrosoftWindows.CrossDevice')
+        RedirectKnownFolders     = $true
+        KnownFoldersPathKey      = 'PersonalData'
+        KnownFolders             = @('Desktop', 'Documents', 'Downloads', 'Music', 'Pictures', 'Videos')
+        CopyKnownFolderContent   = $true
+        WallpaperPath            = ''
     }
 
     Versions = @{

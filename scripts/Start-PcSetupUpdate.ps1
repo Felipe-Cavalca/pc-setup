@@ -233,10 +233,22 @@ try {
 
     Write-Host ''
     Write-Host '[USUARIO] Aplicando e validando configuracoes da conta diaria...' -ForegroundColor Cyan
+    $includePersonalization = $false
+    if ($configuration.Personalization.Enabled -and $LauncherName -eq 'INSTALAR.cmd') {
+        $includePersonalization = [bool]$configuration.Personalization.ApplyOnInstall
+    }
+    elseif ($configuration.Personalization.Enabled -and $LauncherName -eq 'ATUALIZAR.cmd' -and $configuration.Personalization.PromptOnUpdate) {
+        $personalizationAnswer = Read-Host 'Deseja reaplicar a personalizacao do Windows? Digite S para aplicar'
+        $includePersonalization = $personalizationAnswer.Trim().ToUpperInvariant() -in @('S','SIM')
+    }
+    if ($includePersonalization) { Write-Host '[PERSONALIZACAO] Sera aplicada nesta execucao.' -ForegroundColor Yellow }
+    else { Write-Host '[PERSONALIZACAO] Nao sera reaplicada nesta execucao.' -ForegroundColor DarkGray }
     $currentStage = 'PerfilUsuario'
-    Write-PcSetupSessionEvent -Status Started -Message 'Aplicando pacotes e personalizacao da conta diaria.' -Command 'scripts\90-user-profile.ps1' -Arguments @('-Config', $configuration._ConfigPath, '-WindowsApplyReport', $completedApply.Path)
-    & (Join-Path $root 'scripts\90-user-profile.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $completedApply.Path | Out-Host
-    Write-PcSetupSessionEvent -Status Succeeded -Message 'Pacotes e personalizacao da conta diaria validados.'
+    $userProfileArguments = @('-Config', $configuration._ConfigPath, '-WindowsApplyReport', $completedApply.Path)
+    if ($includePersonalization) { $userProfileArguments += '-IncludePersonalization' }
+    Write-PcSetupSessionEvent -Status Started -Message 'Aplicando pacotes e configuracoes da conta diaria.' -Command 'scripts\90-user-profile.ps1' -Arguments $userProfileArguments -Data @{ Personalization = $includePersonalization }
+    & (Join-Path $root 'scripts\90-user-profile.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $completedApply.Path -IncludePersonalization:$includePersonalization | Out-Host
+    Write-PcSetupSessionEvent -Status Succeeded -Message 'Pacotes e configuracoes da conta diaria validados.' -Data @{ Personalization = $includePersonalization }
 
     if ($environments.Count -eq 0) {
         $knownGoodVersions = $null

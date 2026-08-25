@@ -4,7 +4,7 @@
 
 Nunca coloque no arquivo senhas, tokens, chaves de produto, certificados ou chaves de recuperação.
 
-`INSTALAR.cmd` e `ATUALIZAR.cmd` carregam `config\machine.psd1` e usam o mesmo orquestrador de Windows e WSL. Para outro perfil, preserve uma cópia do arquivo atual, substitua o conteúdo de `machine.psd1` pelo perfil revisado e use um dos launchers da raiz. Os arquivos `.ps1` são complementos internos e não são entradas de uso normal.
+`INSTALAR.cmd`, `ATUALIZAR.cmd` e `PERSONALIZAR.cmd` carregam `config\machine.psd1`. Para outro perfil, preserve uma cópia do arquivo atual, substitua o conteúdo de `machine.psd1` pelo perfil revisado e use um dos launchers da raiz. Os arquivos `.ps1` são complementos internos e não são entradas de uso normal.
 
 ## Execução
 
@@ -155,7 +155,7 @@ A autenticação do harness e as credenciais Git não são automatizadas. Elas p
 
 `Packages.Profiles` seleciona arquivos de `config/packages`. Cada linha usa `ID|escopo|criticidade`, por exemplo `Google.Chrome|machine|optional` ou `Git.Git|machine|required`. Linhas antigas sem os campos usam `Packages.InstallScope` e `Packages.DefaultCriticality`.
 
-`Packages.InstallScope` aceita `machine` ou `user`; `required` interrompe quando a versão não pode ser confirmada e `optional` deixa uma pendência para `ATUALIZAR.cmd`. Chrome, Brave e Yubico Authenticator permanecem em `machine`; Bitwarden, PowerShell e Windows Terminal usam `user`. A fase Winget roda na conta diária e instaladores de máquina podem solicitar UAC por conta própria.
+`Packages.InstallScope` aceita `machine` ou `user`; `required` interrompe quando a versão não pode ser confirmada e `optional` deixa uma pendência para `ATUALIZAR.cmd`. Chrome, Brave, Yubico Authenticator e Proton VPN permanecem em `machine`; Bitwarden, Proton Mail, PowerShell e Windows Terminal usam `user`. A fase Winget roda na conta diária e instaladores de máquina podem solicitar UAC por conta própria.
 
 O pacote Yubico instala somente o Authenticator. Registro da chave, PIN, passkeys, contas e códigos de recuperação não fazem parte da automação.
 
@@ -212,7 +212,11 @@ O setup não ativa, suspende, desativa, armazena chave de recuperação nem exig
 
 ## Personalização e debloat
 
-O plano de fundo começa desabilitado e precisa estar dentro do projeto. Ele é aplicado sem elevação na sessão da conta diária, depois que o relatório da fase Windows comprova um ponto de restauração válido.
+`Personalization.Enabled` controla o personalizador. `ApplyOnInstall = $true` o inclui na instalação e `PromptOnUpdate = $true` faz o atualizador perguntar antes de reaplicá-lo. Tema, barra de tarefas, menu Iniciar, Edge, remoções explícitas, pastas conhecidas e plano de fundo permanecem configuráveis no mesmo bloco.
+
+`KnownFoldersPathKey = 'PersonalData'` redireciona as pastas selecionadas para a estrutura de dados. Com `CopyKnownFolderContent = $true`, os arquivos existentes são copiados antes da troca, sem exclusão automática da origem. `PreserveAppxPackages` documenta os componentes que não podem entrar em `RemoveAppxPackages`; o padrão preserva Vincular ao Celular e Cross Device.
+
+O plano de fundo é opcional e precisa estar dentro do projeto. `WallpaperPath = ''` mantém a imagem atual; um caminho relativo aplica a imagem na conta diária. Consulte [`../docs/PERSONALIZACAO.md`](../docs/PERSONALIZACAO.md).
 
 O perfil Felipe habilita um debloat reproduzível, aplicado por `INSTALAR.cmd` e disponível separadamente em `DEBLOAT.cmd`:
 

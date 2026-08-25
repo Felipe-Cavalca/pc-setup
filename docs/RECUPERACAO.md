@@ -17,6 +17,8 @@ O estado fica em `%ProgramData%\pc-setup\apply-state.json`. Depois de corrigir o
 
 Depois que a fase Windows termina, `%LOCALAPPDATA%\pc-setup\user-reconcile-state.json` permite retomar pacotes, personalização e WSL sem reaplicar a máquina. Os scripts dessa fase recusam execução sem o relatório Windows concluído e protegido da mesma configuração. O perfil padrão aceita esse comprovante por no máximo 24 horas; depois disso, uma nova fase Windows protegida é exigida.
 
+`PERSONALIZAR.cmd` é uma execução independente e cria seu próprio ponto de restauração antes de alterar políticas, Registro ou pastas conhecidas. O conteúdo copiado para a nova localização não é removido da origem automaticamente.
+
 Não edite o arquivo de estado manualmente. Se o projeto ou a configuração mudou, preserve o relatório de falha e gere um novo plano. Remover um estado incompleto é uma decisão manual: faça isso apenas depois de verificar quais etapas foram aplicadas, pois o projeto converge de forma aditiva e não desfaz automaticamente alterações concluídas.
 
 ## Winget sem acesso à fonte padrão

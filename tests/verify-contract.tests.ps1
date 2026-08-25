@@ -30,7 +30,7 @@ Assert-Contains $verify 'Get-PcSetupExpectedWslDefaultUser' 'O verify deve prese
 Assert-Contains $verify "Name 'Personalizacao'.+fase da conta diaria" 'O verify de maquina deve encaminhar a personalizacao para a fase correta.'
 Assert-Contains $personalization 'Assert-PcSetupCompletedApplyReport' 'A personalizacao deve exigir o comprovante protegido da mesma aplicacao.'
 Assert-Contains $personalization 'HKCU:\\Control Panel\\Desktop' 'A fase da conta diaria deve conferir o registro do plano de fundo.'
-Assert-Contains $personalization 'Get-FileHash.+sourcePath.+Get-FileHash.+targetPath' 'A fase da conta diaria deve validar a copia local do plano de fundo.'
+Assert-Contains $personalization 'Get-FileHash[^\r\n]+wallpaperSource[\s\S]+Get-FileHash[^\r\n]+wallpaperTarget' 'A fase da conta diaria deve validar a copia local do plano de fundo.'
 Assert-Contains $packages 'Assert-PcSetupCompletedApplyReport' 'A etapa Winget deve exigir o comprovante protegido da mesma aplicacao.'
 Assert-Contains $packages 'Get-PcSetupWingetInstalledInventory' 'A etapa de usuario deve consultar e validar as versoes atuais do Winget.'
 Assert-Contains $packages 'ConfigSha256.*ProjectSha256' 'O inventario Winget deve ser vinculado a configuracao e ao projeto aplicados.'

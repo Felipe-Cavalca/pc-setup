@@ -124,7 +124,12 @@ function Import-PcSetupConfiguration {
         Features       = @('HyperV','WindowsSandbox','VirtualMachinePlatform','WSL','PublicVirtualMachine')
         Packages       = @('Enabled','PreferredSource','PreferCurrentVersion','InstallScope','DefaultCriticality','Profiles','AllowOfflineFallback','OfflineInstallerDirectory','OfflineManifest','RetryCount')
         WSL            = @('Update','DefaultVersion','Distribution','Environments')
-        Personalization = @('Enabled','WallpaperPath')
+        Personalization = @(
+            'Enabled','ApplyOnInstall','PromptOnUpdate','Theme','HideTaskbarSearch','HideTaskView',
+            'ClearStartPins','StartAllAppsView','StartPowerMenuFolders','DisableEdgeBackground',
+            'RemoveOneDrive','RemoveAppxPackages','PreserveAppxPackages','RedirectKnownFolders',
+            'KnownFoldersPathKey','KnownFolders','CopyKnownFolderContent','WallpaperPath'
+        )
         Debloat        = @('Enabled','Mode','Repository','Release','ArchiveSha256','Preset','Silent','AppRemovalTarget','RemoveGamingApps','RequireSha256','RequireConfirmation')
         Recovery       = @('RequireRestorePointBeforeChanges','Scope','SystemProtectionMustBeEnabled','EnableSystemProtectionAutomatically','FailIfRestorePointUnavailable','AllowExistingRestorePointReuse','AllowSameApplySessionReuse','ProtectDirectScriptExecution','UserPhaseReceiptMaxAgeHours')
         Security       = @('DailyUserMustBeStandard','BackupAclBeforeChanges','ManageBitLocker','BitLockerMode','ReportBitLockerStatus','RequireRecoveryKeyCheck','DemoteDailyUserAutomatically','HyperVAdministratorAccounts')
@@ -201,6 +206,33 @@ function Import-PcSetupConfiguration {
     if ([string]::IsNullOrWhiteSpace([string]$configuration.Packages.OfflineManifest)) { throw 'Packages.OfflineManifest nao pode ficar vazio.' }
     if (-not $configuration.Runtime.StopOnError -or -not $configuration.Runtime.RequirePlanBeforeApply) { throw 'Runtime deve interromper em erro e exigir plano antes da aplicacao.' }
     if (-not ($configuration.Runtime.ExecutionLogEnabled -is [bool])) { throw 'Runtime.ExecutionLogEnabled deve ser booleano.' }
+    foreach ($setting in @(
+        'Enabled','ApplyOnInstall','PromptOnUpdate','HideTaskbarSearch','HideTaskView','ClearStartPins',
+        'DisableEdgeBackground','RemoveOneDrive','RedirectKnownFolders','CopyKnownFolderContent'
+    )) {
+        if (-not ($configuration.Personalization[$setting] -is [bool])) { throw "Personalization.$setting deve ser booleano." }
+    }
+    if ([string]$configuration.Personalization.Theme -notin @('Dark','Light')) { throw 'Personalization.Theme deve ser Dark ou Light.' }
+    if ([string]$configuration.Personalization.StartAllAppsView -notin @('Category','Grid','List')) { throw 'Personalization.StartAllAppsView deve ser Category, Grid ou List.' }
+    $startFolderNames = @('Documents','Downloads','FileExplorer','HomeGroup','Music','Network','PersonalFolder','Pictures','Settings','Videos')
+    $configuredStartFolders = @($configuration.Personalization.StartPowerMenuFolders | ForEach-Object { [string]$_ })
+    if (@($configuredStartFolders | Where-Object { $_ -notin $startFolderNames }).Count -gt 0) { throw 'Personalization.StartPowerMenuFolders contem uma pasta desconhecida.' }
+    $configuration.Personalization.StartPowerMenuFolders = @($configuredStartFolders | Select-Object -Unique)
+    $knownFolderNames = @('Desktop','Documents','Downloads','Music','Pictures','Videos')
+    $configuredKnownFolders = @($configuration.Personalization.KnownFolders | ForEach-Object { [string]$_ })
+    if ($configuration.Personalization.RedirectKnownFolders -and $configuredKnownFolders.Count -eq 0) { throw 'Personalization.KnownFolders exige ao menos uma pasta quando o redirecionamento esta habilitado.' }
+    if (@($configuredKnownFolders | Where-Object { $_ -notin $knownFolderNames }).Count -gt 0) { throw 'Personalization.KnownFolders contem uma pasta desconhecida.' }
+    $configuration.Personalization.KnownFolders = @($configuredKnownFolders | Select-Object -Unique)
+    if (-not $configuration.Storage.Paths.ContainsKey([string]$configuration.Personalization.KnownFoldersPathKey)) { throw 'Personalization.KnownFoldersPathKey deve apontar para uma entrada de Storage.Paths.' }
+    foreach ($listName in @('RemoveAppxPackages','PreserveAppxPackages')) {
+        $items = @($configuration.Personalization[$listName] | ForEach-Object { [string]$_ })
+        if (@($items | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -match "[`r`n]" }).Count -gt 0) { throw "Personalization.$listName contem um item invalido." }
+        $configuration.Personalization[$listName] = @($items | Select-Object -Unique)
+    }
+    foreach ($preserved in @($configuration.Personalization.PreserveAppxPackages)) {
+        if (@($configuration.Personalization.RemoveAppxPackages | Where-Object { [string]$_ -eq [string]$preserved }).Count -gt 0) { throw "Personalization nao pode remover e preservar o mesmo pacote: $preserved" }
+    }
+    if ([string]$configuration.Personalization.WallpaperPath -match "[`r`n]") { throw 'Personalization.WallpaperPath nao pode conter quebra de linha.' }
     foreach ($integrationName in @('HyperV','Docker','Steam','Epic')) {
         Assert-PcSetupTableKey -Table $configuration.Storage.Integrations -Key $integrationName -Path 'config.Storage.Integrations'
         $integration = $configuration.Storage.Integrations[$integrationName]

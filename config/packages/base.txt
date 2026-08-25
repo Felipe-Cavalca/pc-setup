@@ -5,3 +5,5 @@ Yubico.Authenticator|machine|optional
 Bitwarden.Bitwarden|user|optional
 RARLab.WinRAR|machine|optional
 Google.GoogleDrive|machine|optional
+Proton.ProtonMail|user|optional
+Proton.ProtonVPN|machine|optional
