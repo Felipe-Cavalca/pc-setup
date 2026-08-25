@@ -27,6 +27,8 @@ O perfil versionado:
 
 As políticas `StartupBoostEnabled` e `BackgroundModeEnabled` do Edge são aplicadas na fase administrativa em `HKLM`. A fase da conta diária apenas remove entradas de inicialização do próprio perfil; ela não tenta gravar na área protegida `HKCU\Software\Policies`.
 
+A verificação da fase Windows não exige antecipadamente as políticas de personalização. Depois dessa verificação, `82-personalization-machine.ps1` cria e confirma em `HKLM` as políticas do Edge e da pesquisa web; em seguida, a fase da conta diária aplica e valida as configurações de `HKCU`. Assim, uma instalação nova não falha apenas porque a personalização ainda não chegou ao seu ponto de execução.
+
 A limpeza dos fixados usa o `start2.bin` vazio da versão do Win11Debloat já fixada e validada por SHA-256 no projeto. O estado anterior recebe uma cópia em `%LOCALAPPDATA%\pc-setup\backups\start-menu`.
 
 A visualização por categoria depende da implementação presente nas builds recentes do Windows 11. Em versões que ainda não oferecem esse modo, o Registro pode aceitar a configuração sem alterar a interface até a atualização do Windows.

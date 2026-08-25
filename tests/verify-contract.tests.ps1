@@ -26,7 +26,8 @@ Assert-Contains $verify 'HyperVAdministratorAccounts' 'O verify deve conferir qu
 Assert-Contains $verify 'Armazenamento Hyper-V' 'O verify deve conferir os destinos configurados no Hyper-V.'
 Assert-Contains $verify 'Test-PcSetupBackupManifest' 'O verify deve validar o snapshot local quando ele existir.'
 Assert-Contains $verify 'Versoes conhecidas' 'O verify da conta diaria deve conferir o snapshot conhecido como bom.'
-Assert-Contains $verify "Name 'Pesquisa web do Windows'" 'O verify deve conferir as politicas de pesquisa web aplicadas na maquina.'
+Assert-Contains $verify "Name 'Pesquisa web do Windows'.+82-personalization-machine\.ps1" 'O verify de maquina deve encaminhar as politicas de pesquisa web para a fase de personalizacao posterior.'
+if ($verify -match "Get-ItemPropertyValue[^\r\n]+DisableWebSearch") { throw 'O verify da fase Windows nao deve exigir politicas que serao aplicadas somente na personalizacao.' }
 Assert-Contains $verify 'Get-PcSetupExpectedWslDefaultUser' 'O verify deve preservar o usuario padrao ao validar Agent.'
 Assert-Contains $verify "Name 'Personalizacao do perfil'.+fase da conta diaria" 'O verify de maquina deve encaminhar a personalizacao do perfil para a fase correta.'
 Assert-Contains $personalization 'Assert-PcSetupCompletedApplyReport' 'A personalizacao deve exigir o comprovante protegido da mesma aplicacao.'
