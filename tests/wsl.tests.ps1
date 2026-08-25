@@ -112,6 +112,17 @@ finally {
     Remove-Item -Path Function:\Invoke-PcSetupFakeWslBootstrap -ErrorAction SilentlyContinue
 }
 
+$stderrCommand = Join-Path $env:TEMP ('pc-setup-wsl-stderr-' + [guid]::NewGuid().ToString('N') + '.cmd')
+try {
+    [IO.File]::WriteAllText($stderrCommand, "@echo off`r`necho INFO ai_memory: starting 1>&2`r`nexit /b 0`r`n", (New-Object Text.ASCIIEncoding))
+    $stderrResult = Invoke-PcSetupWslLinuxScript -Distribution 'Ubuntu-24.04' -ScriptPath '/mnt/c/pc-setup/wsl/linux/bootstrap.sh' -Environment $agent -Profile $agentProfile -WslCommand $stderrCommand
+    Assert-Equal 0 $stderrResult.ExitCode 'Uma mensagem informativa no stderr nao pode substituir o codigo de saida nativo.'
+    Assert-True (@($stderrResult.Output | Where-Object { $_ -match 'INFO ai_memory: starting' }).Count -eq 1) 'O stderr deve permanecer disponivel no diagnostico como texto.'
+}
+finally {
+    if (Test-Path -LiteralPath $stderrCommand) { Remove-Item -LiteralPath $stderrCommand -Force }
+}
+
 $script:capturedWslArguments = @()
 function global:Invoke-PcSetupFakeWsl {
     $script:capturedWslArguments = @($args)

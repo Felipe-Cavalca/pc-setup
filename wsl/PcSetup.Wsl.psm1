@@ -150,10 +150,24 @@ function Invoke-PcSetupWslLinuxScript {
     if (@($arguments | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) {
         throw 'O bootstrap WSL montou um argumento vazio. Revise o perfil antes de chamar o executavel nativo.'
     }
-    $output = @(& $WslCommand --distribution $Distribution --user root --exec bash -- $ScriptPath @arguments 2>&1)
-    $exitCode = $LASTEXITCODE
-    $output | Out-Host
-    return [pscustomobject]@{ ExitCode = $exitCode; Output = @($output | ForEach-Object { [string]$_ }) }
+    # Windows PowerShell 5.1 converte stderr de executaveis nativos em erros nao terminantes.
+    # Com ErrorActionPreference=Stop, ate uma linha INFO encerraria a reconciliacao antes
+    # da leitura do codigo de saida. O processo nativo continua sendo aprovado apenas por exit 0.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& $WslCommand --distribution $Distribution --user root --exec bash -- $ScriptPath @arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    $outputText = @($output | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) { [string]$_.Exception.Message }
+        else { [string]$_ }
+    })
+    $outputText | Out-Host
+    return [pscustomobject]@{ ExitCode = $exitCode; Output = $outputText }
 }
 
 function Get-PcSetupWslInstalledState {
