@@ -9,7 +9,8 @@ Revise `config/machine.psd1` e execute `INSTALAR.cmd`. Os arquivos `.cmd` abaixo
 | Arquivo | O que faz | Breve resumo |
 | --- | --- | --- |
 | `INSTALAR.cmd` | Instalação completa | Planeja, pede confirmação, configura o Windows, aplica o debloat habilitado, instala aplicativos, prepara WSL/Agent e valida o resultado. |
-| `ATUALIZAR.cmd` | Reconciliação | Reaplica a configuração e busca versões atuais sem executar novamente o debloat automaticamente. |
+| `ATUALIZAR.cmd` | Reconciliação | Reaplica a configuração, busca versões atuais, não repete o debloat e pergunta antes de reaplicar a personalização. |
+| `PERSONALIZAR.cmd` | Personalização | Mostra o plano, pede confirmação, cria um ponto de restauração e reaplica somente a aparência, o menu e as pastas pessoais. |
 | `DEBLOAT.cmd` | Debloat independente | Mostra o plano, pede confirmação, cria um ponto de restauração e aplica o Win11Debloat configurado. |
 | `VERIFICAR.cmd` | Verificação geral | Confere o estado prometido pelo perfil e gera o relatório técnico sem aplicar mudanças. |
 | `AGENTE.cmd` | Agente de IA | Abre o agente configurado no WSL, isolado pelo `ai-jail`, para o projeto selecionado. |
@@ -249,9 +250,11 @@ Procedimentos para aplicação incompleta, ACLs, WSL, checkpoints e restauraçã
 
 ## Etapas opcionais
 
-### Plano de fundo
+### Personalização
 
-Uma imagem local pode ser adicionada ao projeto e indicada em `Personalization.WallpaperPath`. A alteração é aplicada ao usuário que executa o bootstrap quando `Enabled = $true`.
+`INSTALAR.cmd` aplica a personalização habilitada; `ATUALIZAR.cmd` pergunta se ela deve ser reaplicada; `PERSONALIZAR.cmd` executa somente essa etapa. O perfil padrão usa tema escuro, oculta pesquisa e Visão de Tarefas, limpa os fixados do Iniciar, usa a visualização de aplicativos por categoria, deixa somente Configurações ao lado do botão de energia, impede o Edge em segundo plano, remove OneDrive e LinkedIn e preserva Vincular ao Celular/Cross Device.
+
+Área de Trabalho, Documentos, Downloads, Música, Imagens e Vídeos passam a usar subpastas de `Storage.Paths.PersonalData`. O conteúdo existente é copiado antes do redirecionamento e a origem não é apagada automaticamente. Uma imagem local pode ser colocada em `config\wallpapers` e indicada em `Personalization.WallpaperPath`; vazio mantém o plano de fundo atual. Veja [`docs/PERSONALIZACAO.md`](docs/PERSONALIZACAO.md).
 
 ### Debloat
 

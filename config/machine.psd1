@@ -265,9 +265,26 @@
     }
 
     Personalization = @{
-        # Será habilitado quando existir um arquivo de plano de fundo revisado no projeto.
-        Enabled       = $false
-        WallpaperPath = ''
+        # Configuracoes do perfil diario; cada opcao pode ser alterada sem guardar segredos.
+        Enabled                  = $true
+        ApplyOnInstall           = $true
+        PromptOnUpdate           = $true
+        Theme                    = 'Dark'
+        HideTaskbarSearch        = $true
+        HideTaskView             = $true
+        ClearStartPins           = $true
+        StartAllAppsView         = 'Category'
+        StartPowerMenuFolders    = @('Settings')
+        DisableEdgeBackground    = $true
+        RemoveOneDrive           = $true
+        RemoveAppxPackages       = @('*LinkedIn*')
+        PreserveAppxPackages     = @('Microsoft.YourPhone', 'MicrosoftWindows.CrossDevice')
+        RedirectKnownFolders     = $true
+        KnownFoldersPathKey      = 'PersonalData'
+        KnownFolders             = @('Desktop', 'Documents', 'Downloads', 'Music', 'Pictures', 'Videos')
+        CopyKnownFolderContent   = $true
+        # Coloque a imagem dentro do projeto e informe o caminho relativo; vazio mantem o plano atual.
+        WallpaperPath            = 'config\wallpapers\felipe.jpg'
     }
 
     Versions = @{

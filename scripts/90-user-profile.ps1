@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [string]$Config = '',
-    [Parameter(Mandatory)][string]$WindowsApplyReport
+    [Parameter(Mandatory)][string]$WindowsApplyReport,
+    [switch]$IncludePersonalization
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,7 +17,20 @@ $applyReport = Assert-PcSetupCompletedApplyReport -Configuration $configuration 
 
 $steps = @()
 $steps += & (Join-Path $PSScriptRoot '60-packages.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $WindowsApplyReport -Apply
-$steps += & (Join-Path $PSScriptRoot '80-personalization.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $WindowsApplyReport -Apply
+if ($IncludePersonalization -and $configuration.Personalization.Enabled) {
+    $machinePersonalizationPath = Join-Path $PSScriptRoot '82-personalization-machine.ps1'
+    if (Test-PcSetupAdministrator) {
+        $steps += & $machinePersonalizationPath -Config $configuration._ConfigPath -WindowsApplyReport $WindowsApplyReport -Apply
+    }
+    else {
+        $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$machinePersonalizationPath`" -Config `"$($configuration._ConfigPath)`" -WindowsApplyReport `"$WindowsApplyReport`" -Apply"
+        $process = Start-Process -FilePath $windowsPowerShell -ArgumentList $arguments -Verb RunAs -Wait -PassThru
+        if ($process.ExitCode -ne 0) { throw "A fase administrativa da personalizacao falhou com codigo $($process.ExitCode)." }
+        $steps += [pscustomobject]@{ Step = 'PersonalizationMachine'; Mode = 'Apply'; Enabled = $true; Action = 'CompletedInElevatedProcess' }
+    }
+    $steps += & (Join-Path $PSScriptRoot '80-personalization.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $WindowsApplyReport -Apply
+}
 
 $report = [ordered]@{
     GeneratedAt        = (Get-Date).ToString('o')
@@ -26,6 +40,7 @@ $report = [ordered]@{
     ConfigSha256       = $applyReport.ConfigSha256
     ProjectSha256      = $applyReport.ProjectSha256
     WindowsApplyReport = $WindowsApplyReport
+    Personalization    = [bool]$IncludePersonalization
     Steps              = $steps
 }
 $reportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'UserReportDirectory'

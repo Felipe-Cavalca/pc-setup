@@ -27,13 +27,13 @@ Assert-Equal 'Planned' @($storageIntegrations.Items | Where-Object Name -eq 'Hyp
 Assert-Equal 'ManualRequired' @($storageIntegrations.Items | Where-Object Name -eq 'Docker')[0].Status 'O Docker deve declarar a etapa manual suportada.'
 
 $packages = & (Join-Path $root 'scripts\60-packages.ps1') -Config $config -Plan
-Assert-Equal 13 @($packages.Items).Count 'O plano deve listar todos os pacotes.'
+Assert-Equal 15 @($packages.Items).Count 'O plano deve listar todos os pacotes.'
 
 $wsl = & (Join-Path $root 'scripts\70-wsl.ps1') -Config $config -Plan
 Assert-Equal 'Plan' $wsl.Mode 'WSL deve permanecer em modo de plano.'
 
 $personalization = & (Join-Path $root 'scripts\80-personalization.ps1') -Config $config -Plan
-Assert-Equal $false $personalization.Enabled 'Personalizacao deve estar desabilitada no perfil padrao.'
+Assert-Equal $true $personalization.Enabled 'Personalizacao deve estar habilitada no perfil padrao.'
 
 $debloat = & (Join-Path $root 'scripts\50-debloat-akita.ps1') -Config $config -Plan
 Assert-Equal $true $debloat.Enabled 'Debloat deve estar configurado no perfil Felipe.'
