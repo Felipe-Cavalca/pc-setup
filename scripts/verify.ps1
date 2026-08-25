@@ -359,14 +359,7 @@ elseif ($configuration.Packages.Enabled) {
 
 if ($configuration.Personalization.Enabled) {
     if ($configuration.Personalization.DisableWebSearch) {
-        try {
-            $searchPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search'
-            $disableWebSearch = [int](Get-ItemPropertyValue -LiteralPath $searchPolicyPath -Name 'DisableWebSearch' -ErrorAction Stop)
-            $connectedSearchUseWeb = [int](Get-ItemPropertyValue -LiteralPath $searchPolicyPath -Name 'ConnectedSearchUseWeb' -ErrorAction Stop)
-            $searchPoliciesOk = $disableWebSearch -eq 1 -and $connectedSearchUseWeb -eq 0
-            Add-Check -Status $(if ($searchPoliciesOk) { 'PASS' } else { 'FAIL' }) -Name 'Pesquisa web do Windows' -Detail "DisableWebSearch=$disableWebSearch; ConnectedSearchUseWeb=$connectedSearchUseWeb"
-        }
-        catch { Add-Check -Status 'FAIL' -Name 'Pesquisa web do Windows' -Detail $_.Exception.Message }
+        Add-Check -Status 'INFO' -Name 'Pesquisa web do Windows' -Detail 'as politicas HKLM sao aplicadas e confirmadas por 82-personalization-machine.ps1 depois da verificacao da fase Windows'
     }
     Add-Check -Status 'INFO' -Name 'Personalizacao do perfil' -Detail 'as configuracoes HKCU sao aplicadas e validadas na fase da conta diaria; consulte o relatorio user-profile em LOCALAPPDATA'
 }
