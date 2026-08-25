@@ -13,7 +13,7 @@ Assert-Equal 'Plan' $machine.Mode 'Identidade da maquina deve permanecer em modo
 
 $directories = & (Join-Path $root 'scripts\20-directories.ps1') -Config $config -Storage $storage -Plan
 Assert-Equal 'Plan' $directories.Mode 'Diretorios devem permanecer em modo de plano.'
-Assert-Equal 8 @($directories.Items).Count 'O plano deve listar todos os diretorios configurados.'
+Assert-Equal 9 @($directories.Items).Count 'O plano deve listar todos os diretorios configurados.'
 
 $permissions = & (Join-Path $root 'scripts\40-permissions.ps1') -Config $config -Storage $storage -Plan
 Assert-Equal 'Plan' $permissions.Mode 'Permissoes devem permanecer em modo de plano.'

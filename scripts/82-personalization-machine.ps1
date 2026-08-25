@@ -28,10 +28,14 @@ if ($mode -eq 'Plan') {
     if ($personalization.DisableEdgeBackground) {
         Write-Host '[PLANO] Desabilitar o inicio rapido e o modo em segundo plano do Edge por politica de maquina.'
     }
+    if ($personalization.DisableWebSearch) {
+        Write-Host '[PLANO] Desabilitar consultas e resultados da web na pesquisa do Windows.'
+    }
     return [pscustomobject]@{
         Step = 'PersonalizationMachine'; Mode = $mode; Enabled = $true
         StartPowerMenuFolders = @($personalization.StartPowerMenuFolders)
         EdgePolicies = [bool]$personalization.DisableEdgeBackground
+        WebSearchPolicies = [bool]$personalization.DisableWebSearch
         Action = 'Plan'
     }
 }
@@ -71,12 +75,24 @@ try {
         }
     }
 
+    if ($personalization.DisableWebSearch) {
+        $searchPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search'
+        if (-not (Test-Path -LiteralPath $searchPolicyPath)) { New-Item -Path $searchPolicyPath -Force | Out-Null }
+        $searchPolicies = @{ DisableWebSearch = 1; ConnectedSearchUseWeb = 0 }
+        foreach ($searchPolicyName in $searchPolicies.Keys) {
+            New-ItemProperty -LiteralPath $searchPolicyPath -Name $searchPolicyName -PropertyType DWord -Value $searchPolicies[$searchPolicyName] -Force | Out-Null
+            $actual = [int](Get-ItemPropertyValue -LiteralPath $searchPolicyPath -Name $searchPolicyName -ErrorAction Stop)
+            if ($actual -ne $searchPolicies[$searchPolicyName]) { throw "A politica $searchPolicyName da pesquisa nao foi confirmada." }
+        }
+    }
+
     $result = [ordered]@{
         Step                  = 'PersonalizationMachine'
         Mode                  = $mode
         Enabled               = $true
         StartPowerMenuFolders = @($personalization.StartPowerMenuFolders)
         EdgePolicies          = [bool]$personalization.DisableEdgeBackground
+        WebSearchPolicies     = [bool]$personalization.DisableWebSearch
         CompletedAt           = (Get-Date).ToString('o')
         Action                = 'Completed'
     }

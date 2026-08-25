@@ -66,6 +66,65 @@ function Get-PcSetupSensitiveProjectMatches {
     return @($output | ForEach-Object { ([string]$_).Replace([string][char]0, [string]::Empty).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
 }
 
+function Get-PcSetupHarnessPackageRoot {
+    param(
+        [Parameter(Mandatory)][string]$LinuxUser,
+        [Parameter(Mandatory)][string]$Package
+    )
+
+    if ($LinuxUser -notmatch '^[a-z_][a-z0-9_-]*$' -or $Package -notmatch '^@[a-z0-9._-]+/[a-z0-9._-]+$') {
+        throw 'O usuario Linux ou o pacote NPM do agente possui formato invalido.'
+    }
+    return "/home/$LinuxUser/.local/lib/node_modules/$Package"
+}
+
+function Test-PcSetupSandboxedHarness {
+    param(
+        [Parameter(Mandatory)][string]$Distribution,
+        [Parameter(Mandatory)][string]$LinuxUser,
+        [Parameter(Mandatory)][string]$ProjectPath,
+        [Parameter(Mandatory)][string]$Command,
+        [Parameter(Mandatory)][string]$EntryPoint,
+        [Parameter(Mandatory)][string]$ModuleRoot
+    )
+
+    $arguments = @(
+        '--distribution', $Distribution,
+        '--user', $LinuxUser,
+        '--cd', $ProjectPath,
+        '--exec', '/usr/local/bin/ai-jail',
+        '--no-network',
+        '--no-inherit-env',
+        '--private-home',
+        '--landlock',
+        '--seccomp',
+        '--rlimits',
+        '--no-save-config',
+        '--no-mise',
+        '--map', $ModuleRoot,
+        '--', $EntryPoint, '--version'
+    )
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& wsl.exe @arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    $outputText = @($output | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) { [string]$_.Exception.Message }
+        else { [string]$_ }
+    })
+    if ($exitCode -ne 0) {
+        $detail = (@($outputText | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Last 6) -join ' ')
+        throw "O preflight do agente falhou dentro do ai-jail. Execute ATUALIZAR.cmd e tente novamente. Detalhe: $detail"
+    }
+    $versionLine = @($outputText | Where-Object { [string]$_ -match 'codex|[0-9]+\.[0-9]+' } | Select-Object -Last 1)
+    Write-Host "[OK] Codex validado dentro do ai-jail: $versionLine" -ForegroundColor Green
+}
+
 try {
     $configuration = Import-PcSetupConfiguration -Path $Config
     if (-not $configuration.Agent.Enabled) { throw 'O agente esta desabilitado na configuracao.' }
@@ -121,6 +180,21 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'ai-jail ausente. Aplique e valide o ambiente WSL Agent.' }
     & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec bash -lc "command -v -- '$Command' >/dev/null"
     if ($LASTEXITCODE -ne 0) { throw "Agente '$Command' nao instalado para o usuario Linux $($profile.LinuxUser)." }
+    $harnessPackageRoot = Get-PcSetupHarnessPackageRoot -LinuxUser ([string]$profile.LinuxUser) -Package ([string]$profile.Harness.Package)
+    $harnessScopeRoot = $harnessPackageRoot.Substring(0, $harnessPackageRoot.LastIndexOf('/'))
+    $harnessBinaryPath = "/home/$($profile.LinuxUser)/.local/bin/$Command"
+    & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec test -x $harnessBinaryPath
+    if ($LASTEXITCODE -ne 0) { throw "Executavel NPM do agente ausente: $harnessBinaryPath. Execute ATUALIZAR.cmd." }
+    & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec test -d $harnessPackageRoot
+    if ($LASTEXITCODE -ne 0) { throw "Pacote NPM do agente ausente: $harnessPackageRoot. Execute ATUALIZAR.cmd." }
+    & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec test -d $harnessScopeRoot
+    if ($LASTEXITCODE -ne 0) { throw "Escopo NPM do agente ausente: $harnessScopeRoot. Execute ATUALIZAR.cmd." }
+    $entryPointOutput = @(& wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec readlink --canonicalize-existing -- $harnessBinaryPath 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $entryPointOutput.Count -eq 0) { throw "Nao foi possivel resolver o executavel NPM: $harnessBinaryPath" }
+    $harnessEntryPoint = ([string]$entryPointOutput[-1]).Replace([string][char]0, [string]::Empty).Trim()
+    if (-not $harnessEntryPoint.StartsWith($harnessPackageRoot.TrimEnd('/') + '/', [StringComparison]::Ordinal)) {
+        throw "O executavel do agente sai da raiz gerenciada: $harnessEntryPoint"
+    }
     if ($Mode -eq 'Managed') {
         & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec test -x /usr/local/bin/ai-memory
         if ($LASTEXITCODE -ne 0) { throw 'ai-memory ausente. Execute ATUALIZAR.cmd e tente novamente.' }
@@ -148,12 +222,12 @@ try {
 
     $capabilities = $configuration.Agent.Capabilities
     if ($strictLockdown) {
-        $aiJailArguments = @('--lockdown', '--network', '--agent-state', '--no-inherit-env', '--no-save-config', '--no-worktree')
+        $aiJailArguments = @('--lockdown', '--network', '--no-agent-state', '--no-inherit-env', '--no-save-config', '--no-worktree')
     }
     else {
         $aiJailArguments = @(
         if ($capabilities.Network) { '--network' } else { '--no-network' }
-        if ($capabilities.PersistAgentState) { '--agent-state' } else { '--no-agent-state' }
+        '--no-agent-state'
         if ($capabilities.Docker) { '--docker' } else { '--no-docker' }
         if ($capabilities.SSH) { '--ssh' } else { '--no-ssh' }
         if ($capabilities.Display) { '--display' } else { '--no-display' }
@@ -181,6 +255,16 @@ try {
         )
     }
 
+    # Use o ponto de entrada canonico dentro do pacote: montar o symlink isolado
+    # faria o Node procurar package.json em ~/.local/bin e tratar ESM como CommonJS.
+    $aiJailArguments += @('--map', $harnessScopeRoot)
+    if ($capabilities.PersistAgentState) {
+        $agentStatePath = "/home/$($profile.LinuxUser)/.codex"
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec test -d $agentStatePath
+        if ($LASTEXITCODE -ne 0) { throw "Estado do Codex ausente: $agentStatePath. Execute ATUALIZAR.cmd." }
+        $aiJailArguments += $(if ($strictLockdown) { @('--map', $agentStatePath) } else { @('--rw-map', $agentStatePath) })
+    }
+
     foreach ($denyPath in @($configuration.Agent.ProjectSecrets.DenyPaths)) {
         $aiJailArguments += @('--deny-path', [string]$denyPath)
     }
@@ -194,8 +278,10 @@ try {
         $aiJailArguments += @('--env', 'AI_MEMORY_AUTH_TOKEN', '--env', 'AI_MEMORY_SERVER_URL')
     }
 
-    $sandboxCommand = if ($Mode -eq 'Managed' -and -not $strictLockdown) { @('ai-memory', 'run', $Command) } else { @($Command) }
+    $sandboxCommand = if ($Mode -eq 'Managed' -and -not $strictLockdown) { @('ai-memory', 'run', '--executable', $harnessEntryPoint, $Command) } else { @($harnessEntryPoint) }
     $aiJailArguments += @('--') + $sandboxCommand
+
+    Test-PcSetupSandboxedHarness -Distribution $distribution -LinuxUser ([string]$profile.LinuxUser) -ProjectPath $wslProjectPath -Command $Command -EntryPoint $harnessEntryPoint -ModuleRoot $harnessScopeRoot
 
     $isolationLabel = if ($strictLockdown) { 'revisao somente leitura; online para autenticacao do Codex' } elseif ($Mode -eq 'Managed') { 'ai-jail restrito com workstream gerenciado pelo ai-memory' } else { 'ai-jail restrito com hooks do ai-memory' }
     Write-Host "[AGENTE] $Command em $wslProjectPath via $isolationLabel." -ForegroundColor Cyan

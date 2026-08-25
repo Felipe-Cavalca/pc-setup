@@ -8,6 +8,16 @@ function Assert-True([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
 }
 
+$configuration = Import-PcSetupConfiguration -Path (Join-Path $root 'config\machine.psd1')
+$backupScript = Get-Content -LiteralPath (Join-Path $root 'scripts\Invoke-PcSetupBackup.ps1') -Raw
+$backupModule = Get-Content -LiteralPath (Join-Path $root 'scripts\lib\PcSetup.Backup.psm1') -Raw
+Assert-True (@($configuration.Backup.SourcePathKeys) -contains 'Development') 'O backup deve incluir os projetos Windows.'
+Assert-True (@($configuration.Backup.UserProfileFolders) -contains 'Downloads') 'O backup deve incluir as pastas padrao do perfil Windows.'
+Assert-True ($configuration.Backup.IncludeSetupInventory) 'O backup deve preservar os inventarios necessarios para reinstalar programas.'
+Assert-True ($backupScript -match 'WindowsProfile/' -and $backupScript -match '\$env:USERPROFILE') 'As pastas do perfil devem ser fontes explicitas do snapshot.'
+Assert-True ($backupScript -match 'SetupInventory' -and $backupScript -match 'WingetInventoryPath' -and $backupScript -match 'KnownGoodVersionPath') 'O snapshot deve incluir os inventarios Winget e known-good quando estiverem disponiveis.'
+Assert-True ($backupModule -match '/XJ') 'A copia de backup nao deve seguir a juncao Data.'
+
 $temporaryRoot = Join-Path $env:TEMP ('pc-setup-backup-test-' + [guid]::NewGuid().ToString('N'))
 try {
     $snapshot = Join-Path $temporaryRoot 'backup-2026-01-01_000000'

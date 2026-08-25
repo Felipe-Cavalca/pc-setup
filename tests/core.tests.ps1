@@ -33,6 +33,16 @@ $dataDisk = [pscustomobject]@{ Number = 1; IsRemovable = $false; HealthStatus = 
 $single = Resolve-PcSetupStorage -Configuration $configuration -Inventory (New-TestInventory -Volumes @($systemVolume, (New-TestVolume -Drive D -Disk 1)) -Disks @($systemDisk, $dataDisk))
 Assert-Equal 'D:\' $single.DataRoot 'Um unico segundo volume fixo deve ser usado.'
 Assert-Equal 'DedicatedVolume' $single.DataMode 'O modo deve indicar volume dedicado.'
+$singlePaths = Get-PcSetupConfiguredPaths -Configuration $configuration -Storage $single
+Assert-Equal 'D:\Felipe\Dev' $singlePaths.Development 'O segundo disco deve organizar os caminhos dentro da pasta do usuario.'
+Assert-Equal 'D:\Backups' $singlePaths.Backups 'Backups deve permanecer global na raiz dedicada.'
+
+$configuration.Storage.Data.DedicatedVolumeSubdirectory = 'Dados'
+$dedicatedSubdirectory = Resolve-PcSetupStorage -Configuration $configuration -Inventory (New-TestInventory -Volumes @($systemVolume, (New-TestVolume -Drive D -Disk 1)) -Disks @($systemDisk, $dataDisk))
+Assert-Equal 'D:\Dados' $dedicatedSubdirectory.DataRoot 'A subpasta opcional do volume dedicado deve ser respeitada.'
+$dedicatedReuse = Resolve-PcSetupStorage -Configuration $configuration -SelectedDataRoot 'D:\Dados' -Inventory (New-TestInventory -Volumes @($systemVolume, (New-TestVolume -Drive D -Disk 1)) -Disks @($systemDisk, $dataDisk))
+Assert-Equal 'D:\Dados' $dedicatedReuse.DataRoot 'O Apply deve reutilizar a raiz dedicada com subpasta.'
+$configuration.Storage.Data.DedicatedVolumeSubdirectory = ''
 
 $fallback = Resolve-PcSetupStorage -Configuration $configuration -Inventory (New-TestInventory -Volumes @($systemVolume) -Disks @($systemDisk))
 Assert-Equal 'C:\Dados' $fallback.DataRoot 'Sem segundo disco deve usar a pasta no volume do Windows.'

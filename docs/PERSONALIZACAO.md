@@ -16,6 +16,7 @@ O perfil versionado:
 
 - usa o tema escuro;
 - oculta a caixa de pesquisa e o botão Visão de Tarefas;
+- desabilita consultas, resultados e sugestões da web na pesquisa do Windows;
 - limpa os aplicativos fixados no menu Iniciar e mantém a possibilidade de fixar itens depois;
 - seleciona a visualização “Todos” em categorias;
 - deixa somente Configurações junto ao botão de energia;
@@ -30,20 +31,39 @@ A limpeza dos fixados usa o `start2.bin` vazio da versão do Win11Debloat já fi
 
 A visualização por categoria depende da implementação presente nas builds recentes do Windows 11. Em versões que ainda não oferecem esse modo, o Registro pode aceitar a configuração sem alterar a interface até a atualização do Windows.
 
+## Barra de tarefas
+
+A ordem desejada para a conta diária é:
+
+1. Explorador de Arquivos;
+2. Brave;
+3. Visual Studio Code;
+4. Terminal;
+5. Proton Mail;
+6. Windows Sandbox.
+
+O projeto não grava diretamente o valor binário e não documentado `Taskband` do perfil. No Windows 11, a automação suportada pela Microsoft usa XML por política, pacote de provisionamento ou CSP e pode reaplicar o layout, impedir remoções ou substituir escolhas do usuário. Para manter a configuração pessoal e editável, fixe esses seis itens manualmente na ordem acima e desafixe Edge, Microsoft Store e Outlook. Consulte a [documentação oficial de personalização da barra de tarefas](https://learn.microsoft.com/windows/configuration/taskbar/pinned-apps).
+
+Brave, Visual Studio Code, Terminal e Proton Mail precisam estar instalados, e Windows Sandbox precisa estar habilitado, antes de aparecerem para fixação.
+
 ## Pastas pessoais
 
-As pastas declaradas em `KnownFolders` passam a apontar para subpastas de `Storage.Paths.PersonalData`. No padrão:
+As pastas declaradas em `KnownFolders` permanecem nos caminhos padrão do perfil Windows:
 
 ```text
-<raiz de dados>\Data\<usuário>\Desktop
-<raiz de dados>\Data\<usuário>\Documents
-<raiz de dados>\Data\<usuário>\Downloads
-<raiz de dados>\Data\<usuário>\Music
-<raiz de dados>\Data\<usuário>\Pictures
-<raiz de dados>\Data\<usuário>\Videos
+C:\Users\Felipe\Desktop
+C:\Users\Felipe\Documents
+C:\Users\Felipe\Downloads
+C:\Users\Felipe\Music
+C:\Users\Felipe\Pictures
+C:\Users\Felipe\Videos
 ```
 
-O script usa a API de pastas conhecidas do Windows. Antes de redirecionar, copia o conteúdo existente com `robocopy`, sem seguir junções e sem excluir a origem. Depois de conferir o resultado, a cópia antiga pode ser removida manualmente.
+O padrão `RestoreKnownFoldersToProfile = $true` corrige instalações feitas com a configuração anterior. O script usa a API de pastas conhecidas do Windows, copia o conteúdo de volta com `robocopy`, sem seguir junções, atualiza o caminho reconhecido pelo sistema e não exclui a origem antiga. Depois de conferir os arquivos, a árvore legada pode ser removida manualmente.
+
+Na raiz de dados, a estrutura do usuário contém `Apps`, `Containers`, `Dev`, `Drive`, `Games` e `VMs`. A entrada `Data` é uma junção para `C:\Users\Felipe`; ela oferece navegação conveniente, mas não move nem duplica o perfil. Um caminho real já existente no lugar da junção interrompe a etapa sem apagar nada.
+
+`GoogleDrive.Enabled = $true` registra `Storage.Paths.Drive` como ponto de montagem do Google Drive em modo streaming, usando a [configuração avançada documentada pelo Google](https://knowledge.workspace.google.com/admin/drive/advanced-drive-for-desktop-configuration?hl=pt). A pasta precisa estar vazia na primeira configuração. O script não faz login, não guarda credenciais e não move o cache local do cliente. Se o Google Drive já estiver aberto, a nova localização pode aparecer somente depois de reiniciar o aplicativo.
 
 Esse mecanismo não muda automaticamente os diretórios internos de Docker, Steam ou Epic. Eles continuam documentados como integrações próprias porque cada aplicativo possui seu formato e seu ciclo de vida.
 
