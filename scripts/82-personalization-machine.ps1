@@ -25,9 +25,14 @@ if (-not $personalization.Enabled) {
 
 if ($mode -eq 'Plan') {
     Write-Host "[PLANO] Mostrar no menu Iniciar somente: $(@($personalization.StartPowerMenuFolders) -join ', ')."
+    if ($personalization.DisableEdgeBackground) {
+        Write-Host '[PLANO] Desabilitar o inicio rapido e o modo em segundo plano do Edge por politica de maquina.'
+    }
     return [pscustomobject]@{
         Step = 'PersonalizationMachine'; Mode = $mode; Enabled = $true
-        StartPowerMenuFolders = @($personalization.StartPowerMenuFolders); Action = 'Plan'
+        StartPowerMenuFolders = @($personalization.StartPowerMenuFolders)
+        EdgePolicies = [bool]$personalization.DisableEdgeBackground
+        Action = 'Plan'
     }
 }
 
@@ -56,11 +61,22 @@ try {
         if ($actual -ne $expected) { throw "A politica do atalho $folder no menu Iniciar nao foi confirmada." }
     }
 
+    if ($personalization.DisableEdgeBackground) {
+        $edgePolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
+        if (-not (Test-Path -LiteralPath $edgePolicyPath)) { New-Item -Path $edgePolicyPath -Force | Out-Null }
+        foreach ($edgePolicyName in @('StartupBoostEnabled', 'BackgroundModeEnabled')) {
+            New-ItemProperty -LiteralPath $edgePolicyPath -Name $edgePolicyName -PropertyType DWord -Value 0 -Force | Out-Null
+            $actual = [int](Get-ItemPropertyValue -LiteralPath $edgePolicyPath -Name $edgePolicyName -ErrorAction Stop)
+            if ($actual -ne 0) { throw "A politica $edgePolicyName do Edge nao foi confirmada." }
+        }
+    }
+
     $result = [ordered]@{
         Step                  = 'PersonalizationMachine'
         Mode                  = $mode
         Enabled               = $true
         StartPowerMenuFolders = @($personalization.StartPowerMenuFolders)
+        EdgePolicies          = [bool]$personalization.DisableEdgeBackground
         CompletedAt           = (Get-Date).ToString('o')
         Action                = 'Completed'
     }

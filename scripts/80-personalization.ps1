@@ -269,9 +269,6 @@ elseif ($personalization.ClearStartPins) {
 $actions += "StartAllApps:$($personalization.StartAllAppsView)"
 
 if ($personalization.DisableEdgeBackground) {
-    $edgePolicyPath = 'HKCU:\Software\Policies\Microsoft\Edge'
-    Set-PcSetupDword -Path $edgePolicyPath -Name 'StartupBoostEnabled' -Value 0
-    Set-PcSetupDword -Path $edgePolicyPath -Name 'BackgroundModeEnabled' -Value 0
     $edgeRunPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
     if (Test-Path -LiteralPath $edgeRunPath) {
         $runValues = Get-ItemProperty -LiteralPath $edgeRunPath
@@ -279,7 +276,7 @@ if ($personalization.DisableEdgeBackground) {
             Remove-ItemProperty -LiteralPath $edgeRunPath -Name $property.Name -Force
         }
     }
-    $actions += 'EdgeBackgroundDisabled'
+    $actions += 'EdgeStartupEntriesRemoved'
 }
 
 if ($personalization.RemoveOneDrive) {
