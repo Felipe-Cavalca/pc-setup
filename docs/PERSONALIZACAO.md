@@ -24,6 +24,8 @@ O perfil versionado:
 - remove o aplicativo LinkedIn do perfil diário;
 - não remove Vincular ao Celular nem o componente Cross Device.
 
+As políticas `StartupBoostEnabled` e `BackgroundModeEnabled` do Edge são aplicadas na fase administrativa em `HKLM`. A fase da conta diária apenas remove entradas de inicialização do próprio perfil; ela não tenta gravar na área protegida `HKCU\Software\Policies`.
+
 A limpeza dos fixados usa o `start2.bin` vazio da versão do Win11Debloat já fixada e validada por SHA-256 no projeto. O estado anterior recebe uma cópia em `%LOCALAPPDATA%\pc-setup\backups\start-menu`.
 
 A visualização por categoria depende da implementação presente nas builds recentes do Windows 11. Em versões que ainda não oferecem esse modo, o Registro pode aceitar a configuração sem alterar a interface até a atualização do Windows.
