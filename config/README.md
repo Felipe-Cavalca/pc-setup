@@ -214,11 +214,13 @@ O setup não ativa, suspende, desativa, armazena chave de recuperação nem exig
 
 ## Personalização e debloat
 
-`Personalization.Enabled` controla o personalizador. `ApplyOnInstall = $true` o inclui na instalação e `PromptOnUpdate = $true` faz o atualizador perguntar antes de reaplicá-lo. Tema, barra de tarefas, menu Iniciar, Edge, remoções explícitas, pastas conhecidas e plano de fundo permanecem configuráveis no mesmo bloco.
+`Personalization.Enabled` controla o personalizador. `ApplyOnInstall = $true` o inclui na instalação e `PromptOnUpdate = $true` faz o atualizador perguntar antes de reaplicá-lo. Tema, barra de tarefas, menu Iniciar, Edge, remoções explícitas, pastas conhecidas, plano de fundo e tela de bloqueio permanecem configuráveis no mesmo bloco.
+
+`Taskbar.Pins` define os fixados por `DesktopApplicationID`, `DesktopApplicationLinkPath` ou `AppUserModelID`. O padrão substitui os atalhos do Windows e usa `PinGeneration = 1`; você continua livre para alterar a barra. Ao mudar o padrão e querer fixar novamente um aplicativo já removido, incremente essa geração. `WebSearchMode = 'Supported'` usa apenas políticas documentadas; `Aggressive` acrescenta ajustes de melhor esforço para Windows 11 Pro.
 
 O padrão usa `RedirectKnownFolders = $false` e `RestoreKnownFoldersToProfile = $true`: as pastas conhecidas permanecem no perfil Windows e, se já estiverem redirecionadas, o conteúdo é copiado de volta sem exclusão automática da origem. `ProfileLink` cria `Data` dentro da pasta de dados do usuário como uma junção para o perfil original. `GoogleDrive` registra `Storage.Paths.Drive` como ponto de montagem em modo `Streaming`; login, credenciais e seleção de conta continuam manuais. `PreserveAppxPackages` documenta os componentes que não podem entrar em `RemoveAppxPackages`; o padrão preserva Vincular ao Celular e Cross Device.
 
-O plano de fundo é opcional e precisa estar dentro do projeto. `WallpaperPath = ''` mantém a imagem atual; um caminho relativo aplica a imagem na conta diária. Consulte [`../docs/PERSONALIZACAO.md`](../docs/PERSONALIZACAO.md).
+O plano de fundo é opcional e precisa estar dentro do projeto. `WallpaperPath = ''` mantém a imagem atual; um caminho relativo aplica a imagem na conta diária. `LockScreen.Mode = 'Manual'` prepara a imagem e preserva a possibilidade de trocá-la nas Configurações. Consulte [`../docs/PERSONALIZACAO.md`](../docs/PERSONALIZACAO.md).
 
 O perfil Felipe habilita um debloat reproduzível, aplicado por `INSTALAR.cmd` e disponível separadamente em `DEBLOAT.cmd`:
 

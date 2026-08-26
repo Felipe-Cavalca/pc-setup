@@ -58,7 +58,7 @@ try {
         if ($process.ExitCode -ne 0) { throw "A fase administrativa da personalizacao falhou com codigo $($process.ExitCode)." }
     }
 
-    & $personalizationPath -Config $configPath -DataRoot $dataRoot -Apply | Out-Host
+    & $personalizationPath -Config $configPath -DataRoot $dataRoot -OpenManualSettings -Apply | Out-Host
     Write-Host ''
     Write-Host 'PERSONALIZACAO CONCLUIDA.' -ForegroundColor Green
     exit 0

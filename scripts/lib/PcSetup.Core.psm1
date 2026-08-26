@@ -131,6 +131,15 @@ function Import-PcSetupConfiguration {
     if ($configuration.Personalization -is [hashtable] -and -not $configuration.Personalization.ContainsKey('DisableWebSearch')) {
         $configuration.Personalization['DisableWebSearch'] = $false
     }
+    if ($configuration.Personalization -is [hashtable] -and -not $configuration.Personalization.ContainsKey('WebSearchMode')) {
+        $configuration.Personalization['WebSearchMode'] = 'Supported'
+    }
+    if ($configuration.Personalization -is [hashtable] -and -not $configuration.Personalization.ContainsKey('Taskbar')) {
+        $configuration.Personalization['Taskbar'] = @{ Enabled = $false; ReplaceDefaultPins = $false; PinGeneration = 1; Pins = @() }
+    }
+    if ($configuration.Personalization -is [hashtable] -and -not $configuration.Personalization.ContainsKey('LockScreen')) {
+        $configuration.Personalization['LockScreen'] = @{ Enabled = $false; Mode = 'Manual'; ImagePath = ''; DisableSpotlight = $false; ShowOnSignIn = $true; Status = 'None' }
+    }
     if ($configuration.Personalization -is [hashtable] -and -not $configuration.Personalization.ContainsKey('ProfileLink')) {
         $configuration.Personalization['ProfileLink'] = @{ Enabled = $false; PathKey = 'UserRoot'; Name = 'Data' }
     }
@@ -147,10 +156,10 @@ function Import-PcSetupConfiguration {
         WSL            = @('Update','DefaultVersion','Distribution','Environments')
         Personalization = @(
             'Enabled','ApplyOnInstall','PromptOnUpdate','Theme','HideTaskbarSearch','HideTaskView','DisableWebSearch',
-            'ClearStartPins','StartAllAppsView','StartPowerMenuFolders','DisableEdgeBackground',
+            'WebSearchMode','ClearStartPins','StartAllAppsView','StartPowerMenuFolders','Taskbar','DisableEdgeBackground',
             'RemoveOneDrive','RemoveAppxPackages','PreserveAppxPackages','RedirectKnownFolders',
             'RestoreKnownFoldersToProfile','KnownFoldersPathKey','KnownFolders','CopyKnownFolderContent',
-            'ProfileLink','GoogleDrive','WallpaperPath'
+            'ProfileLink','GoogleDrive','WallpaperPath','LockScreen'
         )
         Debloat        = @('Enabled','Mode','Repository','Release','ArchiveSha256','Preset','Silent','AppRemovalTarget','RemoveGamingApps','RequireSha256','RequireConfirmation')
         Recovery       = @('RequireRestorePointBeforeChanges','Scope','SystemProtectionMustBeEnabled','EnableSystemProtectionAutomatically','FailIfRestorePointUnavailable','AllowExistingRestorePointReuse','AllowSameApplySessionReuse','ProtectDirectScriptExecution','UserPhaseReceiptMaxAgeHours')
@@ -245,11 +254,30 @@ function Import-PcSetupConfiguration {
         if (-not ($configuration.Personalization[$setting] -is [bool])) { throw "Personalization.$setting deve ser booleano." }
     }
     if ([string]$configuration.Personalization.Theme -notin @('Dark','Light')) { throw 'Personalization.Theme deve ser Dark ou Light.' }
+    if ([string]$configuration.Personalization.WebSearchMode -notin @('Supported','Aggressive')) { throw 'Personalization.WebSearchMode deve ser Supported ou Aggressive.' }
     if ([string]$configuration.Personalization.StartAllAppsView -notin @('Category','Grid','List')) { throw 'Personalization.StartAllAppsView deve ser Category, Grid ou List.' }
     $startFolderNames = @('Documents','Downloads','FileExplorer','HomeGroup','Music','Network','PersonalFolder','Pictures','Settings','Videos')
     $configuredStartFolders = @($configuration.Personalization.StartPowerMenuFolders | ForEach-Object { [string]$_ })
     if (@($configuredStartFolders | Where-Object { $_ -notin $startFolderNames }).Count -gt 0) { throw 'Personalization.StartPowerMenuFolders contem uma pasta desconhecida.' }
     $configuration.Personalization.StartPowerMenuFolders = @($configuredStartFolders | Select-Object -Unique)
+    $taskbar = $configuration.Personalization.Taskbar
+    if (-not ($taskbar -is [hashtable])) { throw 'Personalization.Taskbar deve ser uma hashtable.' }
+    foreach ($key in @('Enabled','ReplaceDefaultPins','PinGeneration','Pins')) { Assert-PcSetupTableKey -Table $taskbar -Key $key -Path 'config.Personalization.Taskbar' }
+    foreach ($setting in @('Enabled','ReplaceDefaultPins')) {
+        if (-not ($taskbar[$setting] -is [bool])) { throw "Personalization.Taskbar.$setting deve ser booleano." }
+    }
+    try { $taskbar.PinGeneration = [int]$taskbar.PinGeneration }
+    catch { throw 'Personalization.Taskbar.PinGeneration deve ser um numero inteiro positivo.' }
+    if ($taskbar.PinGeneration -lt 1) { throw 'Personalization.Taskbar.PinGeneration deve ser um numero inteiro positivo.' }
+    $normalizedPins = @()
+    foreach ($pin in @($taskbar.Pins)) {
+        if (-not ($pin -is [hashtable])) { throw 'Cada item de Personalization.Taskbar.Pins deve ser uma hashtable.' }
+        foreach ($key in @('Type','Value')) { Assert-PcSetupTableKey -Table $pin -Key $key -Path 'config.Personalization.Taskbar.Pins[]' }
+        if ([string]$pin.Type -notin @('DesktopApplicationID','DesktopApplicationLinkPath','AppUserModelID')) { throw "Tipo de fixacao da barra invalido: $($pin.Type)" }
+        if ([string]::IsNullOrWhiteSpace([string]$pin.Value) -or [string]$pin.Value -match "[`r`n]") { throw 'Personalization.Taskbar.Pins contem um valor invalido.' }
+        $normalizedPins += @{ Type = [string]$pin.Type; Value = [string]$pin.Value }
+    }
+    $taskbar.Pins = @($normalizedPins)
     $knownFolderNames = @('Desktop','Documents','Downloads','Music','Pictures','Videos')
     $configuredKnownFolders = @($configuration.Personalization.KnownFolders | ForEach-Object { [string]$_ })
     if (($configuration.Personalization.RedirectKnownFolders -or $configuration.Personalization.RestoreKnownFoldersToProfile) -and $configuredKnownFolders.Count -eq 0) { throw 'Personalization.KnownFolders exige ao menos uma pasta quando o gerenciamento esta habilitado.' }
@@ -277,6 +305,15 @@ function Import-PcSetupConfiguration {
         if (@($configuration.Personalization.RemoveAppxPackages | Where-Object { [string]$_ -eq [string]$preserved }).Count -gt 0) { throw "Personalization nao pode remover e preservar o mesmo pacote: $preserved" }
     }
     if ([string]$configuration.Personalization.WallpaperPath -match "[`r`n]") { throw 'Personalization.WallpaperPath nao pode conter quebra de linha.' }
+    $lockScreen = $configuration.Personalization.LockScreen
+    if (-not ($lockScreen -is [hashtable])) { throw 'Personalization.LockScreen deve ser uma hashtable.' }
+    foreach ($key in @('Enabled','Mode','ImagePath','DisableSpotlight','ShowOnSignIn','Status')) { Assert-PcSetupTableKey -Table $lockScreen -Key $key -Path 'config.Personalization.LockScreen' }
+    foreach ($setting in @('Enabled','DisableSpotlight','ShowOnSignIn')) {
+        if (-not ($lockScreen[$setting] -is [bool])) { throw "Personalization.LockScreen.$setting deve ser booleano." }
+    }
+    if ([string]$lockScreen.Mode -ne 'Manual') { throw 'Personalization.LockScreen.Mode suportado: Manual.' }
+    if ([string]$lockScreen.Status -notin @('None','Weather','Calendar','Mail')) { throw 'Personalization.LockScreen.Status deve ser None, Weather, Calendar ou Mail.' }
+    if ([string]$lockScreen.ImagePath -match "[`r`n]") { throw 'Personalization.LockScreen.ImagePath nao pode conter quebra de linha.' }
     foreach ($integrationName in @('HyperV','Docker','Steam','Epic')) {
         Assert-PcSetupTableKey -Table $configuration.Storage.Integrations -Key $integrationName -Path 'config.Storage.Integrations'
         $integration = $configuration.Storage.Integrations[$integrationName]

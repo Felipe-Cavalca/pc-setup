@@ -239,12 +239,26 @@
         HideTaskbarSearch        = $true
         HideTaskView             = $true
         DisableWebSearch         = $true
+        WebSearchMode            = 'Supported'
         ClearStartPins           = $true
         StartAllAppsView         = 'Category'
         StartPowerMenuFolders    = @('Settings')
+        Taskbar = @{
+            Enabled            = $true
+            ReplaceDefaultPins = $true
+            PinGeneration      = 1
+            Pins = @(
+                @{ Type = 'DesktopApplicationID';       Value = 'Microsoft.Windows.Explorer' }
+                @{ Type = 'DesktopApplicationID';       Value = 'Brave.5JYAMH4N45CID63PRQ7VEXIY74' }
+                @{ Type = 'DesktopApplicationID';       Value = 'Microsoft.VisualStudioCode' }
+                @{ Type = 'AppUserModelID';             Value = 'Microsoft.WindowsTerminal_8wekyb3d8bbwe!App' }
+                @{ Type = 'DesktopApplicationLinkPath'; Value = '%APPDATA%\Microsoft\Windows\Start Menu\Programs\Proton Mail.lnk' }
+                @{ Type = 'DesktopApplicationID';       Value = 'Microsoft.Windows.Containers.Sandbox' }
+            )
+        }
         DisableEdgeBackground    = $true
         RemoveOneDrive           = $true
-        RemoveAppxPackages       = @('*LinkedIn*')
+        RemoveAppxPackages       = @('7EE7776C.LinkedInforWindows', 'Microsoft.OutlookForWindows', '*LinkedIn*')
         PreserveAppxPackages     = @('Microsoft.YourPhone', 'MicrosoftWindows.CrossDevice')
         RedirectKnownFolders     = $false
         RestoreKnownFoldersToProfile = $true
@@ -262,6 +276,14 @@
             PathKey = 'Drive'
         }
         WallpaperPath            = ''
+        LockScreen = @{
+            Enabled          = $false
+            Mode             = 'Manual'
+            ImagePath        = ''
+            DisableSpotlight = $true
+            ShowOnSignIn     = $true
+            Status           = 'None'
+        }
     }
 
     Versions = @{
