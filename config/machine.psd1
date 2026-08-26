@@ -278,12 +278,28 @@
         HideTaskbarSearch        = $true
         HideTaskView             = $true
         DisableWebSearch         = $true
+        # Supported usa somente politicas documentadas; Aggressive acrescenta o bloqueio por usuario usado no Windows Pro.
+        WebSearchMode            = 'Aggressive'
         ClearStartPins           = $true
         StartAllAppsView         = 'Category'
         StartPowerMenuFolders    = @('Settings')
+        Taskbar = @{
+            Enabled            = $true
+            ReplaceDefaultPins = $true
+            PinGeneration      = 1
+            # Altere esta lista e incremente PinGeneration para reaplicar itens removidos anteriormente.
+            Pins = @(
+                @{ Type = 'DesktopApplicationID';       Value = 'Microsoft.Windows.Explorer' }
+                @{ Type = 'DesktopApplicationID';       Value = 'Brave.5JYAMH4N45CID63PRQ7VEXIY74' }
+                @{ Type = 'DesktopApplicationID';       Value = 'Microsoft.VisualStudioCode' }
+                @{ Type = 'AppUserModelID';             Value = 'Microsoft.WindowsTerminal_8wekyb3d8bbwe!App' }
+                @{ Type = 'DesktopApplicationLinkPath'; Value = '%APPDATA%\Microsoft\Windows\Start Menu\Programs\Proton Mail.lnk' }
+                @{ Type = 'DesktopApplicationID';       Value = 'Microsoft.Windows.Containers.Sandbox' }
+            )
+        }
         DisableEdgeBackground    = $true
         RemoveOneDrive           = $true
-        RemoveAppxPackages       = @('*LinkedIn*')
+        RemoveAppxPackages       = @('7EE7776C.LinkedInforWindows', 'Microsoft.OutlookForWindows', '*LinkedIn*')
         PreserveAppxPackages     = @('Microsoft.YourPhone', 'MicrosoftWindows.CrossDevice')
         RedirectKnownFolders     = $false
         RestoreKnownFoldersToProfile = $true
@@ -302,6 +318,14 @@
         }
         # Coloque a imagem dentro do projeto e informe o caminho relativo; vazio mantem o plano atual.
         WallpaperPath            = 'config\wallpapers\gargantua-realistic.png'
+        LockScreen = @{
+            Enabled          = $true
+            Mode             = 'Manual'
+            ImagePath        = 'config\wallpapers\gargantua-realistic.png'
+            DisableSpotlight = $true
+            ShowOnSignIn     = $true
+            Status           = 'None'
+        }
     }
 
     Versions = @{

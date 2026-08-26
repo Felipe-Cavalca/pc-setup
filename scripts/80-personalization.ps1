@@ -4,6 +4,7 @@ param(
     [string]$Config = '',
     [string]$WindowsApplyReport = '',
     [string]$DataRoot = '',
+    [switch]$OpenManualSettings,
     [switch]$Plan,
     [switch]$Apply
 )
@@ -246,6 +247,12 @@ if (-not [string]::IsNullOrWhiteSpace([string]$personalization.WallpaperPath)) {
     if (-not (Test-Path -LiteralPath $wallpaperSource -PathType Leaf)) { throw "Arquivo de plano de fundo ausente: $wallpaperSource" }
 }
 
+$lockScreenSource = $null
+if ($personalization.LockScreen.Enabled -and -not [string]::IsNullOrWhiteSpace([string]$personalization.LockScreen.ImagePath)) {
+    $lockScreenSource = Resolve-PcSetupProjectPath -Configuration $configuration -Value ([string]$personalization.LockScreen.ImagePath) -SettingName 'Personalization.LockScreen.ImagePath'
+    if (-not (Test-Path -LiteralPath $lockScreenSource -PathType Leaf)) { throw "Arquivo da tela de bloqueio ausente: $lockScreenSource" }
+}
+
 $planActions = @(
     "Tema $($personalization.Theme)",
     'Configurar barra de tarefas e menu Iniciar',
@@ -255,11 +262,13 @@ $planActions = @(
     'Preservar Vincular ao Celular e Cross Device'
 )
 if ($personalization.DisableWebSearch) { $planActions += 'Remover consultas, resultados e destaques da web da pesquisa do Windows' }
+if ($personalization.Taskbar.Enabled) { $planActions += "Aplicar $(@($personalization.Taskbar.Pins).Count) fixados editaveis na barra de tarefas (geracao $($personalization.Taskbar.PinGeneration))" }
 if ($personalization.RedirectKnownFolders) { $planActions += "Redirecionar pastas pessoais para Storage.Paths.$($personalization.KnownFoldersPathKey), copiando o conteudo sem apagar a origem" }
 if ($personalization.RestoreKnownFoldersToProfile) { $planActions += 'Restaurar as pastas pessoais para o perfil padrao do Windows, copiando o conteudo sem apagar a origem antiga' }
 if ($personalization.ProfileLink.Enabled) { $planActions += "Criar a juncao $($personalization.ProfileLink.Name) para o perfil original do Windows" }
 if ($personalization.GoogleDrive.Enabled) { $planActions += "Configurar Google Drive em streaming usando Storage.Paths.$($personalization.GoogleDrive.PathKey)" }
 if ($wallpaperSource) { $planActions += "Aplicar plano de fundo: $wallpaperSource" }
+if ($lockScreenSource) { $planActions += "Preparar a tela de bloqueio para selecao manual: $lockScreenSource" }
 if ($mode -eq 'Plan') {
     foreach ($action in $planActions) { Write-Host "[PLANO] $action" }
     return [pscustomobject]@{ Step = 'Personalization'; Mode = $mode; Enabled = $true; Actions = $planActions; Action = 'Plan' }
@@ -295,6 +304,11 @@ $actions += "Theme:$($personalization.Theme)"
 Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -Value $(if ($personalization.HideTaskbarSearch) { 0 } else { 2 })
 Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'ShowTaskViewButton' -Value $(if ($personalization.HideTaskView) { 0 } else { 1 })
 $actions += 'Taskbar'
+if ($personalization.DisableWebSearch -and $personalization.WebSearchMode -eq 'Aggressive') {
+    Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'BingSearchEnabled' -Value 0
+    Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'CortanaConsent' -Value 0
+    $actions += 'WebSearchAggressiveUserSettings'
+}
 
 $allAppsViewMode = @{ Category = 0; Grid = 1; List = 2 }[[string]$personalization.StartAllAppsView]
 Set-PcSetupDword -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Start' -Name 'AllAppsViewMode' -Value $allAppsViewMode
@@ -303,6 +317,7 @@ if ($currentBuild -lt 26200) {
     $actions += 'StartAllAppsPendingWindowsUpdate'
 }
 if ($personalization.ClearStartPins -and $currentBuild -ge 22621) {
+    Get-Process -Name StartMenuExperienceHost -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     $emptyStartAsset = Get-PcSetupEmptyStartAsset -Configuration $configuration -StateRoot $stateRoot
     $startStateDirectory = Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState'
     New-Item -ItemType Directory -Path $startStateDirectory -Force | Out-Null
@@ -404,6 +419,26 @@ if ($wallpaperSource) {
     $actions += 'Wallpaper'
 }
 
+$lockScreenTarget = $null
+if ($lockScreenSource) {
+    $assetDirectory = Join-Path $stateRoot 'assets'
+    New-Item -ItemType Directory -Path $assetDirectory -Force | Out-Null
+    $lockScreenTarget = Join-Path $assetDirectory ('lock-screen' + [IO.Path]::GetExtension($lockScreenSource))
+    Copy-Item -LiteralPath $lockScreenSource -Destination $lockScreenTarget -Force
+    if ((Get-FileHash -LiteralPath $lockScreenSource -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $lockScreenTarget -Algorithm SHA256).Hash) {
+        throw 'A copia local da imagem da tela de bloqueio diverge do arquivo configurado.'
+    }
+    if ($personalization.LockScreen.DisableSpotlight) {
+        $contentDeliveryPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+        Set-PcSetupDword -Path $contentDeliveryPath -Name 'RotatingLockScreenEnabled' -Value 0
+        Set-PcSetupDword -Path $contentDeliveryPath -Name 'RotatingLockScreenOverlayEnabled' -Value 0
+    }
+    Write-Host "[MANUAL] Tela de bloqueio: selecione $lockScreenTarget" -ForegroundColor Yellow
+    Write-Host "[MANUAL] Mostrar na entrada: $($personalization.LockScreen.ShowOnSignIn); status: $($personalization.LockScreen.Status)." -ForegroundColor Yellow
+    if ($OpenManualSettings) { Start-Process 'ms-settings:lockscreen' }
+    $actions += 'LockScreenPreparedForManualSelection'
+}
+
 $explorer = Get-Process -Name explorer -ErrorAction SilentlyContinue
 if ($explorer) { $explorer | Stop-Process -Force }
 
@@ -419,6 +454,7 @@ $result = [ordered]@{
     ProfileLink        = $profileLinkResult
     GoogleDrive        = $googleDriveResult
     Wallpaper          = $wallpaperTarget
+    LockScreen         = [pscustomobject]@{ Mode = [string]$personalization.LockScreen.Mode; Image = $lockScreenTarget; RequiresManualSelection = [bool]$lockScreenTarget }
     DataRoot           = [IO.Path]::GetFullPath($DataRoot)
     WindowsApplyReport = if ($applyReport) { $WindowsApplyReport } else { $null }
     ConfigSha256       = (Get-FileHash -LiteralPath $configuration._ConfigPath -Algorithm SHA256).Hash

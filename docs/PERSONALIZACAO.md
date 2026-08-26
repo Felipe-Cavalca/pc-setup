@@ -16,18 +16,18 @@ O perfil versionado:
 
 - usa o tema escuro;
 - oculta a caixa de pesquisa e o botão Visão de Tarefas;
-- desabilita consultas, resultados e destaques da web na pesquisa do Windows;
+- tenta desabilitar consultas, resultados e destaques da web na pesquisa do Windows;
 - limpa os aplicativos fixados no menu Iniciar e mantém a possibilidade de fixar itens depois;
 - seleciona a visualização “Todos” em categorias;
 - deixa somente Configurações junto ao botão de energia;
 - desabilita o início rápido e o modo em segundo plano do Edge e remove entradas de inicialização do perfil;
 - desinstala o OneDrive sem apagar a pasta de dados que já existia e oculta o atalho residual do Explorador;
-- remove o aplicativo LinkedIn do perfil diário;
+- remove Outlook e LinkedIn dos perfis existentes e do provisionamento de novos usuários;
 - não remove Vincular ao Celular nem o componente Cross Device.
 
-As políticas `StartupBoostEnabled` e `BackgroundModeEnabled` do Edge são aplicadas na fase administrativa em `HKLM`. A pesquisa web usa `DisableWebSearch`, `ConnectedSearchUseWeb` e `EnableDynamicContentInWSB`, também em `HKLM`. A fase da conta diária apenas remove entradas de inicialização do próprio perfil; ela não tenta gravar na área protegida `HKCU\Software\Policies`.
+As políticas `StartupBoostEnabled` e `BackgroundModeEnabled` do Edge são aplicadas na fase administrativa em `HKLM`. A pesquisa web usa `DisableWebSearch`, `ConnectedSearchUseWeb` e `EnableDynamicContentInWSB`, também em `HKLM`. No perfil pessoal, `WebSearchMode = 'Aggressive'` acrescenta `DisableSearchBoxSuggestions` no hive protegido da conta diária e desabilita Bing/Cortana na pesquisa do perfil. Esse complemento é necessário porque a política documentada `DoNotUseWebResults` não é suportada no Windows 11 Pro; por isso, o resultado continua sendo de melhor esforço e pode mudar em uma atualização do Windows.
 
-A verificação da fase Windows não exige antecipadamente as políticas de personalização. Depois dessa verificação, `82-personalization-machine.ps1` cria e confirma em `HKLM` as políticas do Edge e da pesquisa web; em seguida, a fase da conta diária aplica e valida as configurações de `HKCU`. Assim, uma instalação nova não falha apenas porque a personalização ainda não chegou ao seu ponto de execução.
+A verificação da fase Windows não exige antecipadamente as políticas de personalização. Depois dessa verificação, `82-personalization-machine.ps1` cria e confirma em `HKLM` as políticas do Edge e da pesquisa web. Uma tarefa temporária executada como `LocalSystem` usa o provedor oficial WMI Bridge para os atalhos do Iniciar e o layout da barra, sendo removida ao terminar. Em seguida, a fase da conta diária aplica e valida as configurações de `HKCU`.
 
 A limpeza dos fixados usa o `start2.bin` vazio da versão do Win11Debloat já fixada e validada por SHA-256 no projeto. O estado anterior recebe uma cópia em `%LOCALAPPDATA%\pc-setup\backups\start-menu`.
 
@@ -44,9 +44,17 @@ A ordem desejada para a conta diária é:
 5. Proton Mail;
 6. Windows Sandbox.
 
-O projeto não grava diretamente o valor binário e não documentado `Taskband` do perfil. No Windows 11, a automação suportada pela Microsoft usa XML por política, pacote de provisionamento ou CSP e pode reaplicar o layout, impedir remoções ou substituir escolhas do usuário. Para manter a configuração pessoal e editável, fixe esses seis itens manualmente na ordem acima e desafixe Edge, Microsoft Store e Outlook. Consulte a [documentação oficial de personalização da barra de tarefas](https://learn.microsoft.com/windows/configuration/taskbar/pinned-apps).
+O projeto não grava o valor binário e não documentado `Taskband`. Ele gera XML no formato oficial e o aplica à conta diária pelo CSP `StartLayout`. `ReplaceDefaultPins = $true` remove os fixados padrão. Cada item recebe `PinGeneration`, permitindo desafixar, fixar novos programas e reorganizar a barra depois da aplicação.
+
+Para alterar o padrão, edite `Personalization.Taskbar.Pins`. Incremente `PinGeneration` quando quiser que itens removidos anteriormente sejam fixados outra vez e execute `PERSONALIZAR.cmd` ou aceite a personalização no `ATUALIZAR.cmd`. O layout normalmente aparece após sair e entrar na conta; builds recentes podem aplicá-lo imediatamente. Consulte a [documentação oficial de personalização da barra de tarefas](https://learn.microsoft.com/windows/configuration/taskbar/pinned-apps).
 
 Brave, Visual Studio Code, Terminal e Proton Mail precisam estar instalados, e Windows Sandbox precisa estar habilitado, antes de aparecerem para fixação.
+
+## Tela de bloqueio
+
+`Personalization.LockScreen` registra a imagem desejada e desabilita o Spotlight do perfil. No Windows 11 Pro comum, o CSP oficial que força uma imagem só é suportado em cenários educacionais ou de computador compartilhado e também impediria a troca manual. Por isso, o padrão usa `Mode = 'Manual'`: a imagem é copiada para `%LOCALAPPDATA%\pc-setup\assets`, e `PERSONALIZAR.cmd` abre a página correta para selecioná-la.
+
+O bloco também documenta `ShowOnSignIn` e `Status`. O padrão usa a mesma imagem na entrada e nenhum aplicativo de status. Essas duas escolhas são confirmadas manualmente na página de bloqueio para manter o Windows Pro editável.
 
 ## Pastas pessoais
 

@@ -262,9 +262,9 @@ Procedimentos para aplicação incompleta, ACLs, WSL, checkpoints e restauraçã
 
 ### Personalização
 
-`INSTALAR.cmd` aplica a personalização habilitada; `ATUALIZAR.cmd` pergunta se ela deve ser reaplicada; `PERSONALIZAR.cmd` executa somente essa etapa. O perfil padrão usa tema escuro, oculta pesquisa e Visão de Tarefas, limpa os fixados do Iniciar, usa a visualização de aplicativos por categoria, deixa somente Configurações ao lado do botão de energia, impede o Edge em segundo plano, remove OneDrive e LinkedIn e preserva Vincular ao Celular/Cross Device.
+`INSTALAR.cmd` aplica a personalização habilitada; `ATUALIZAR.cmd` pergunta se ela deve ser reaplicada; `PERSONALIZAR.cmd` executa somente essa etapa. O perfil padrão usa tema escuro, oculta pesquisa e Visão de Tarefas, limpa os fixados do Iniciar, configura uma barra editável, usa a visualização de aplicativos por categoria, deixa somente Configurações ao lado do botão de energia, impede o Edge em segundo plano, remove OneDrive, Outlook e LinkedIn e preserva Vincular ao Celular/Cross Device.
 
-Área de Trabalho, Documentos, Downloads, Música, Imagens e Vídeos permanecem no perfil padrão do Windows. Se uma versão anterior do projeto as redirecionou, o conteúdo é copiado de volta sem apagar a origem antiga. A etapa também cria a junção `Data` para o perfil original e configura `Drive` como ponto de montagem streaming do Google Drive. Uma imagem local pode ser colocada em `config\wallpapers` e indicada em `Personalization.WallpaperPath`; vazio mantém o plano de fundo atual. Veja [`docs/PERSONALIZACAO.md`](docs/PERSONALIZACAO.md).
+Área de Trabalho, Documentos, Downloads, Música, Imagens e Vídeos permanecem no perfil padrão do Windows. Se uma versão anterior do projeto as redirecionou, o conteúdo é copiado de volta sem apagar a origem antiga. A etapa também cria a junção `Data` para o perfil original e configura `Drive` como ponto de montagem streaming do Google Drive. Imagens locais em `config\wallpapers` podem ser usadas no plano de fundo e, com seleção manual guiada, na tela de bloqueio. Veja [`docs/PERSONALIZACAO.md`](docs/PERSONALIZACAO.md).
 
 ### Debloat
 
