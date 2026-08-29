@@ -15,6 +15,8 @@ Com `Runtime.ExecutionLogEnabled = $true`, a janela mostra o caminho do log `exe
 
 O estado fica em `%ProgramData%\pc-setup\apply-state.json`. Depois de corrigir o erro, execute o mesmo `INSTALAR.cmd` ou `ATUALIZAR.cmd`. A retomada só é aceita quando configuração, scripts, raiz de dados e ponto de restauração continuam correspondendo à aplicação interrompida.
 
+Se o Windows remover o ponto de restauração durante um reinício, o próximo uso do launcher preserva o estado antigo como `apply-state-invalid-*.json`, cria um novo ponto obrigatório e reinicia a reconciliação idempotente. Não apague manualmente `%ProgramData%\pc-setup\apply-state.json`.
+
 Depois que a fase Windows termina, `%LOCALAPPDATA%\pc-setup\user-reconcile-state.json` permite retomar pacotes, personalização e WSL sem reaplicar a máquina. Os scripts dessa fase recusam execução sem o relatório Windows concluído e protegido da mesma configuração. O perfil padrão aceita esse comprovante por no máximo 24 horas; depois disso, uma nova fase Windows protegida é exigida.
 
 `PERSONALIZAR.cmd` é uma execução independente e cria seu próprio ponto de restauração antes de alterar políticas, Registro ou pastas conhecidas. O conteúdo copiado para a nova localização não é removido da origem automaticamente.

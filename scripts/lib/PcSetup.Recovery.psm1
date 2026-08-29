@@ -141,6 +141,7 @@ function Resume-PcSetupChangeSession {
         [Parameter(Mandatory)][string]$Description,
         [Parameter(Mandatory)][string]$SequenceNumber,
         [Parameter(Mandatory)][string]$SessionId,
+        [switch]$ReturnNullIfMissing,
         [scriptblock]$ListAction = (Get-PcSetupDefaultListAction)
     )
 
@@ -154,6 +155,7 @@ function Resume-PcSetupChangeSession {
         Where-Object { [string]$_.SequenceNumber -eq $SequenceNumber -and $_.Description -eq $Description } |
         Select-Object -First 1
     if (-not $existing) {
+        if ($ReturnNullIfMissing) { return $null }
         throw 'O ponto de restauracao salvo para esta aplicacao nao existe mais. A retomada foi interrompida.'
     }
 
