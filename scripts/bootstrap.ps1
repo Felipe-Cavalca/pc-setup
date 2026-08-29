@@ -166,19 +166,30 @@ $isResume = $false
 try {
     if (Test-Path -LiteralPath $applyStatePath -PathType Leaf) {
         $applyState = Get-Content -Raw -LiteralPath $applyStatePath | ConvertFrom-Json
-        if ($applyState.ConfigSha256 -ne $configHash -or $applyState.ProjectSha256 -ne $projectHash -or $applyState.DataRoot -ne $storage.DataRoot -or [bool]$applyState.IncludeDebloat -ne $includeConfiguredDebloat) {
-            throw 'Existe uma aplicacao incompleta com outra configuracao. Nao remova o estado sem revisar o relatorio anterior.'
-        }
         if (-not $configuration.Recovery.AllowSameApplySessionReuse) { throw 'A retomada da mesma aplicacao esta desabilitada na configuracao.' }
-        $restorePoint = Resume-PcSetupChangeSession -Description $applyState.RestorePoint.Description -SequenceNumber ([string]$applyState.RestorePoint.SequenceNumber) -SessionId $applyState.RestorePoint.SessionId
-        $sessionStarted = $true
-        $isResume = $true
-        if ($applyState.Stage -eq 'RestartRequired' -and $applyState.BootMarker -eq (Get-PcSetupBootMarker)) {
-            throw 'Os recursos foram habilitados, mas o Windows ainda nao foi reiniciado. Reinicie e execute o mesmo comando -Apply.'
+        $restorePoint = Resume-PcSetupChangeSession -Description $applyState.RestorePoint.Description -SequenceNumber ([string]$applyState.RestorePoint.SequenceNumber) -SessionId $applyState.RestorePoint.SessionId -ReturnNullIfMissing
+        if ($null -eq $restorePoint) {
+            $invalidStateName = 'apply-state-invalid-{0}-{1}.json' -f (Get-Date -Format 'yyyyMMdd-HHmmss'), ([guid]::NewGuid().ToString('N').Substring(0, 8))
+            $invalidStatePath = Join-Path $stateDirectory $invalidStateName
+            Move-Item -LiteralPath $applyStatePath -Destination $invalidStatePath
+            Write-Warning "O ponto da aplicacao anterior nao existe mais. O estado antigo foi preservado em $invalidStatePath. Uma nova aplicacao protegida sera iniciada."
+            $applyState = $null
         }
-        Write-Host '[RETOMADA] Continuando a aplicacao incompleta.' -ForegroundColor Yellow
+        else {
+            if ($applyState.ConfigSha256 -ne $configHash -or $applyState.ProjectSha256 -ne $projectHash -or $applyState.DataRoot -ne $storage.DataRoot -or [bool]$applyState.IncludeDebloat -ne $includeConfiguredDebloat) {
+                Stop-PcSetupChangeSession
+                throw 'Existe uma aplicacao incompleta com outra configuracao. Nao remova o estado sem revisar o relatorio anterior.'
+            }
+            $sessionStarted = $true
+            $isResume = $true
+            if ($applyState.Stage -eq 'RestartRequired' -and $applyState.BootMarker -eq (Get-PcSetupBootMarker)) {
+                throw 'Os recursos foram habilitados, mas o Windows ainda nao foi reiniciado. Reinicie e execute o mesmo comando -Apply.'
+            }
+            Write-Host '[RETOMADA] Continuando a aplicacao incompleta.' -ForegroundColor Yellow
+        }
     }
-    else {
+
+    if (-not $isResume) {
         $restorePoint = Start-PcSetupChangeSession -EntryPoint $MyInvocation.MyCommand.Name
         $sessionStarted = $true
         $applyState = [ordered]@{
