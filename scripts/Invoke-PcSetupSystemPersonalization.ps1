@@ -132,9 +132,18 @@ try {
     Set-PcSetupDeviceCspInstance -ClassName 'MDM_Policy_Config01_Start02' -ParentId './Vendor/MSFT/Policy/Config' -InstanceId 'Start' -Properties $startProperties
 
     $taskbarXml = $null
+    $taskbarStatus = 'Disabled'
+    $taskbarError = $null
     if ($personalization.Taskbar.Enabled) {
         $taskbarXml = ConvertTo-PcSetupTaskbarXml -Taskbar $personalization.Taskbar
-        Set-PcSetupUserStartLayout -Sid $UserSid -Xml $taskbarXml
+        try {
+            Set-PcSetupUserStartLayout -Sid $UserSid -Xml $taskbarXml
+            $taskbarStatus = 'Applied'
+        }
+        catch {
+            $taskbarStatus = 'ManualRequired'
+            $taskbarError = $_.Exception.Message
+        }
     }
 
     $result = [ordered]@{
@@ -142,6 +151,8 @@ try {
         UserSid               = $UserSid
         StartPowerMenuFolders = @($personalization.StartPowerMenuFolders)
         TaskbarEnabled        = [bool]$personalization.Taskbar.Enabled
+        TaskbarStatus         = $taskbarStatus
+        TaskbarError          = $taskbarError
         TaskbarPinGeneration  = [int]$personalization.Taskbar.PinGeneration
         TaskbarPins           = @($personalization.Taskbar.Pins)
         CompletedAt           = (Get-Date).ToString('o')

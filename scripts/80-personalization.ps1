@@ -262,7 +262,7 @@ $planActions = @(
     'Preservar Vincular ao Celular e Cross Device'
 )
 if ($personalization.DisableWebSearch) { $planActions += 'Remover consultas, resultados e destaques da web da pesquisa do Windows' }
-if ($personalization.Taskbar.Enabled) { $planActions += "Aplicar $(@($personalization.Taskbar.Pins).Count) fixados editaveis na barra de tarefas (geracao $($personalization.Taskbar.PinGeneration))" }
+if ($personalization.Taskbar.Enabled) { $planActions += "Tentar aplicar $(@($personalization.Taskbar.Pins).Count) fixados editaveis na barra de tarefas (geracao $($personalization.Taskbar.PinGeneration)); usar ajuste manual se o CSP for recusado" }
 if ($personalization.RedirectKnownFolders) { $planActions += "Redirecionar pastas pessoais para Storage.Paths.$($personalization.KnownFoldersPathKey), copiando o conteudo sem apagar a origem" }
 if ($personalization.RestoreKnownFoldersToProfile) { $planActions += 'Restaurar as pastas pessoais para o perfil padrao do Windows, copiando o conteudo sem apagar a origem antiga' }
 if ($personalization.ProfileLink.Enabled) { $planActions += "Criar a juncao $($personalization.ProfileLink.Name) para o perfil original do Windows" }
@@ -293,6 +293,29 @@ if ($personalization.RedirectKnownFolders -and -not (Test-Path -LiteralPath $kno
 
 $stateRoot = Get-PcSetupRuntimePath -Configuration $configuration -Key 'UserStateDirectory'
 $actions = @()
+$taskbarStatus = if ($personalization.Taskbar.Enabled) { 'Unknown' } else { 'Disabled' }
+$taskbarDetail = ''
+if ($personalization.Taskbar.Enabled) {
+    $machineReportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'ReportDirectory' -SystemRoot ([IO.Path]::GetPathRoot($env:SystemRoot))
+    $taskbarReportFile = Get-ChildItem -LiteralPath $machineReportDirectory -Filter 'personalization-system-*.json' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if ($taskbarReportFile) {
+        try {
+            $taskbarReport = Get-Content -LiteralPath $taskbarReportFile.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            $taskbarStatus = [string]$taskbarReport.TaskbarStatus
+            $taskbarDetail = [string]$taskbarReport.TaskbarError
+        }
+        catch {
+            $taskbarStatus = 'Unknown'
+            $taskbarDetail = "Relatorio administrativo ilegivel: $($taskbarReportFile.FullName)"
+        }
+    }
+    if ($taskbarStatus -eq 'ManualRequired') {
+        Write-Host '[MANUAL] O Windows recusou o layout oficial da barra. Fixe e organize os aplicativos manualmente; as demais personalizacoes continuarao.' -ForegroundColor Yellow
+    }
+    $actions += "TaskbarPins:$taskbarStatus"
+}
 $currentBuild = [int](Get-ItemPropertyValue -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name CurrentBuildNumber -ErrorAction Stop)
 
 $themePath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
@@ -453,6 +476,7 @@ $result = [ordered]@{
     KnownFolders       = $knownFolderResults
     ProfileLink        = $profileLinkResult
     GoogleDrive        = $googleDriveResult
+    TaskbarPins        = [pscustomobject]@{ Status = $taskbarStatus; Detail = $taskbarDetail }
     Wallpaper          = $wallpaperTarget
     LockScreen         = [pscustomobject]@{ Mode = [string]$personalization.LockScreen.Mode; Image = $lockScreenTarget; RequiresManualSelection = [bool]$lockScreenTarget }
     DataRoot           = [IO.Path]::GetFullPath($DataRoot)
