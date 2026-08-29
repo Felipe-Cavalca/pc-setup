@@ -44,7 +44,9 @@ A ordem desejada para a conta diária é:
 5. Proton Mail;
 6. Windows Sandbox.
 
-O projeto não grava o valor binário e não documentado `Taskband`. Ele gera XML no formato oficial e o aplica à conta diária pelo CSP `StartLayout`. `ReplaceDefaultPins = $true` remove os fixados padrão. Cada item recebe `PinGeneration`, permitindo desafixar, fixar novos programas e reorganizar a barra depois da aplicação.
+O projeto não grava o valor binário e não documentado `Taskband`. Ele gera XML no formato oficial e tenta aplicá-lo à conta diária pelo CSP `StartLayout`. `ReplaceDefaultPins = $true` remove os fixados padrão. Cada item recebe `PinGeneration`, permitindo desafixar, fixar novos programas e reorganizar a barra depois da aplicação.
+
+Algumas builds recusam a instância por usuário do WMI Bridge mesmo quando a política existe na edição Pro. Nesse caso, o relatório registra `TaskbarStatus = ManualRequired`, a instalação continua com as demais personalizações e a barra fica livre para ajuste manual. O projeto não usa alterações binárias não documentadas como fallback.
 
 Para alterar o padrão, edite `Personalization.Taskbar.Pins`. Incremente `PinGeneration` quando quiser que itens removidos anteriormente sejam fixados outra vez e execute `PERSONALIZAR.cmd` ou aceite a personalização no `ATUALIZAR.cmd`. O layout normalmente aparece após sair e entrar na conta; builds recentes podem aplicá-lo imediatamente. Consulte a [documentação oficial de personalização da barra de tarefas](https://learn.microsoft.com/windows/configuration/taskbar/pinned-apps).
 

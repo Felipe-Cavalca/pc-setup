@@ -127,7 +127,7 @@ if (-not $personalization.Enabled) {
 if ($mode -eq 'Plan') {
     Write-Host "[PLANO] Mostrar no menu Iniciar somente: $(@($personalization.StartPowerMenuFolders) -join ', ')."
     if ($personalization.Taskbar.Enabled) {
-        Write-Host "[PLANO] Substituir os fixados padrao da barra por $(@($personalization.Taskbar.Pins).Count) item(ns), com PinGeneration=$($personalization.Taskbar.PinGeneration)."
+        Write-Host "[PLANO] Tentar substituir os fixados padrao da barra por $(@($personalization.Taskbar.Pins).Count) item(ns), com PinGeneration=$($personalization.Taskbar.PinGeneration); se o CSP for recusado, manter ajuste manual."
     }
     if ($personalization.DisableEdgeBackground) { Write-Host '[PLANO] Desabilitar o inicio rapido e o modo em segundo plano do Edge por politica de maquina.' }
     if ($personalization.DisableWebSearch) { Write-Host "[PLANO] Desabilitar a pesquisa web no modo $($personalization.WebSearchMode)." }
@@ -193,6 +193,9 @@ try {
 
     $appxResult = Remove-PcSetupMachineAppxPackages -Patterns @($personalization.RemoveAppxPackages) -PreservePatterns @($personalization.PreserveAppxPackages)
     $systemResult = Invoke-PcSetupSystemPersonalization -Configuration $configuration -ConfigPath $configuration._ConfigPath -UserSid $dailyUserSid
+    if ($systemResult.Result.TaskbarStatus -eq 'ManualRequired') {
+        Write-Warning "O Windows recusou o layout oficial da barra de tarefas. A instalacao continuara e a barra ficara para ajuste manual. Detalhe: $($systemResult.Result.TaskbarError)"
+    }
 
     $result = [ordered]@{
         Step                   = 'PersonalizationMachine'
@@ -201,6 +204,8 @@ try {
         UserSid                = $dailyUserSid
         StartPowerMenuFolders  = @($personalization.StartPowerMenuFolders)
         Taskbar                = $personalization.Taskbar
+        TaskbarStatus          = [string]$systemResult.Result.TaskbarStatus
+        TaskbarError           = [string]$systemResult.Result.TaskbarError
         SystemCspReport        = $systemResult.Path
         EdgePolicies           = [bool]$personalization.DisableEdgeBackground
         WebSearchPolicies      = [bool]$personalization.DisableWebSearch
