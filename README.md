@@ -13,7 +13,7 @@ Revise `config/machine.psd1` e execute `INSTALAR.cmd`. Os arquivos `.cmd` abaixo
 | `PERSONALIZAR.cmd` | Personalização | Mostra o plano, pede confirmação, cria um ponto de restauração e reaplica somente a aparência, o menu e as pastas pessoais. |
 | `DEBLOAT.cmd` | Debloat independente | Mostra o plano, pede confirmação, cria um ponto de restauração e aplica o Win11Debloat configurado. |
 | `VERIFICAR.cmd` | Verificação geral | Confere o estado prometido pelo perfil e gera o relatório técnico sem aplicar mudanças. |
-| `AGENTE.cmd` | Agente de IA | Abre o Codex no projeto selecionado usando `ai-jail`; o modo Normal também usa `ai-memory`. |
+| `AGENTE.cmd` / `agente` | Agente de IA | Abre o Codex isolado pelo `ai-jail`; `agente` usa o projeto atual no modo Normal, `--nova` inicia outra sessão e `--sem-memoria` evita captura pelo `ai-memory`. |
 | `BACKUP.cmd` | Backup local | Cria um snapshot local com manifesto e hashes, sem apagar arquivos automaticamente. |
 | `VERIFICAR-BACKUP.cmd` | Verificação de backup | Confere o manifesto e os hashes de um snapshot existente. |
 | `EXPORTAR-BACKUP.cmd` | Cópia externa | Copia um backup local verificado para o destino externo escolhido. |
