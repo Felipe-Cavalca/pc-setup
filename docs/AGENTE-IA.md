@@ -12,6 +12,8 @@ Ele não cria uma conta Windows, não cria uma VM, não instala o computador e n
 
 Use `AGENTE.cmd` sempre que quiser que o Codex trabalhe com o isolamento e a memória definidos por este projeto. O Codex instalado diretamente no Windows ou aberto por outro launcher continua funcionando, mas esse outro fluxo não recebe automaticamente as fronteiras do `ai-jail` nem a continuidade gerenciada do `ai-memory`.
 
+Depois de `INSTALAR.cmd` ou `ATUALIZAR.cmd`, um novo terminal também aceita `agente` dentro de qualquer projeto. Esse comando usa a pasta atual e o modo Normal sem perguntar caminho ou modo; não cria alias para `codex` e recusa a instalação se já existir outro `agente` no `PATH`. Use `agente --nova` para não retomar a sessão vinculada ou `agente --sem-memoria` para uma execução temporária sem captura.
+
 Fluxo normal:
 
 1. depois de instalar ou atualizar o repositório, execute `ATUALIZAR.cmd` uma vez;
@@ -84,6 +86,7 @@ O launcher passa opções explícitas ao `ai-jail`, usa home privado, mantém La
 1. **Normal**: padrão recomendado. Usa `ai-jail`, inicia o `ai-memory` e executa `ai-memory run codex`; o projeto fica gravável.
 2. **Revisão**: usa `ai-jail --lockdown` e deixa o projeto somente leitura. Rede e estado de login continuam habilitados porque o Codex é remoto; a continuidade gerenciada não é o objetivo desse modo.
 3. **Direto**: executa o Codex diretamente no `ai-jail`, sem o wrapper `ai-memory run`. Serve principalmente para diagnóstico e compatibilidade; MCP e hooks já instalados podem continuar disponíveis.
+4. **Sem memória**: executa o Codex no mesmo `ai-jail`, mas usa um `CODEX_HOME` temporário do qual as entradas MCP e hooks do `ai-memory` são removidas. O estado histórico não é apagado nem alterado e a sessão temporária é descartada ao sair. Isso não torna o Codex offline nem oculta do provedor remoto o conteúdo normal da conversa.
 
 `Agent.RestrictedMode.Lockdown = $true` força o comportamento de revisão independentemente da escolha. Para malware, instaladores desconhecidos ou repositórios deliberadamente hostis, use uma VM descartável sem credenciais compartilhadas.
 
@@ -104,7 +107,9 @@ ai-memory status --json
 ai-memory finalize-session
 ```
 
-O Codex não oferece um evento confiável de fim real da sessão. Execute `finalize-session` ao encerrar um trabalho quando quiser produzir imediatamente o resumo final, o handoff e a consolidação elegível. Não há finalização automática porque duas sessões simultâneas no mesmo projeto poderiam ser confundidas.
+Ao sair de um Codex aberto no modo Normal, o próprio `ai-memory run` importa o transcript, fecha a lease e preserva o código de saída do Codex. Em seguida, o launcher executa `finalize-session` para produzir o resumo/handoff quando suportado; uma falha nessa etapa aparece como aviso separado. Uma nova abertura retoma automaticamente a sessão Codex vinculada à workstream atual. Na primeira adoção, somente sessões nativas do mesmo checkout são oferecidas. Use `agente --nova` (ou `-Fresh` no launcher PowerShell) quando quiser manter o histórico da workstream, mas iniciar uma sessão Codex nova.
+
+Se outra execução ainda possuir a workstream, o `ai-memory` mantém uma lease renovável, espera brevemente por uma finalização em curso e informa o conflito sem interromper o processo ativo. Uma execução encerrada abruptamente perde a lease após a expiração curta; no encerramento normal ela é liberada antes do retorno ao terminal.
 
 Para aquecer a memória de um repositório existente, revise primeiro o que seria coletado:
 

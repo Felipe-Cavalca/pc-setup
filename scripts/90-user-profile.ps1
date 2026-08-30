@@ -16,6 +16,7 @@ if ($env:USERNAME -ne [string]$configuration.Accounts.DailyUser.Name) {
 $applyReport = Assert-PcSetupCompletedApplyReport -Configuration $configuration -Path $WindowsApplyReport
 
 $steps = @()
+$steps += & (Join-Path $PSScriptRoot 'Install-AgentCommand.ps1') -Config $configuration._ConfigPath -Apply
 $steps += & (Join-Path $PSScriptRoot '60-packages.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $WindowsApplyReport -Apply
 if ($IncludePersonalization -and $configuration.Personalization.Enabled) {
     $machinePersonalizationPath = Join-Path $PSScriptRoot '82-personalization-machine.ps1'

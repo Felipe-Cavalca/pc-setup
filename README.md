@@ -13,7 +13,7 @@ Revise `config/machine.psd1` e execute `INSTALAR.cmd`. Os arquivos `.cmd` abaixo
 | `PERSONALIZAR.cmd` | Personalização | Mostra o plano, pede confirmação, cria um ponto de restauração e reaplica somente a aparência, o menu e as pastas pessoais. |
 | `DEBLOAT.cmd` | Debloat independente | Mostra o plano, pede confirmação, cria um ponto de restauração e aplica o Win11Debloat configurado. |
 | `VERIFICAR.cmd` | Verificação geral | Confere o estado prometido pelo perfil e gera o relatório técnico sem aplicar mudanças. |
-| `AGENTE.cmd` | Agente de IA | Abre o Codex no projeto selecionado usando `ai-jail`; o modo Normal também usa `ai-memory`. |
+| `AGENTE.cmd` / `agente` | Agente de IA | Abre o Codex isolado pelo `ai-jail`; `agente` usa o projeto atual no modo Normal, `--nova` inicia outra sessão e `--sem-memoria` evita captura pelo `ai-memory`. |
 | `BACKUP.cmd` | Backup local | Cria um snapshot local com manifesto e hashes, sem apagar arquivos automaticamente. |
 | `VERIFICAR-BACKUP.cmd` | Verificação de backup | Confere o manifesto e os hashes de um snapshot existente. |
 | `EXPORTAR-BACKUP.cmd` | Cópia externa | Copia um backup local verificado para o destino externo escolhido. |
@@ -226,7 +226,7 @@ O bootstrap principal configura os recursos globais do WSL. Na instalação inic
 
 Os comandos, perfis convergentes e a decisão entre `/mnt/d/Felipe/Dev` e o filesystem Linux estão em [`wsl/README.md`](wsl/README.md). Os relatórios WSL incluem as versões APT, do harness, do `ai-jail` e do `ai-memory` realmente encontradas no manifesto instalado.
 
-O perfil padrão instala a versão atual do pacote NPM `@openai/codex` para o usuário Linux `agent`. A autenticação é feita manualmente uma vez e permanece no estado explicitamente liberado do agente. O `ai-memory` roda como o mesmo usuário, em serviço local protegido por token, registra MCP e hooks do Codex e usa a raiz Git como identidade padrão do projeto. `AGENTE.cmd` solicita o modo e um diretório, usando por padrão `ai-jail ai-memory run codex`; a opção de revisão deixa o projeto somente leitura. Antes de abrir, o preflight informa caminhos sensíveis que serão negados. Consulte o modelo de segurança, a operação da memória e as limitações em [`docs/AGENTE-IA.md`](docs/AGENTE-IA.md).
+O perfil padrão instala a versão atual do pacote NPM `@openai/codex` para o usuário Linux `agent`. A autenticação é feita manualmente uma vez e permanece no estado explicitamente liberado do agente. O `ai-memory` roda como o mesmo usuário, em serviço local protegido por token, registra MCP e hooks do Codex e usa a raiz Git como identidade padrão do projeto. `AGENTE.cmd` solicita o modo e um diretório, usando por padrão `ai-jail ai-memory run codex`; a opção de revisão deixa o projeto somente leitura. A fase da conta diária também instala `agente` no `PATH`: dentro de um projeto, ele abre diretamente o modo Normal; `agente --nova` inicia uma sessão nova e `agente --sem-memoria` usa um estado temporário sem MCP/hooks do `ai-memory`. O comando nativo `codex` não é alterado. Antes de abrir, o preflight informa caminhos sensíveis que serão negados. Consulte o modelo de segurança, a operação da memória e as limitações em [`docs/AGENTE-IA.md`](docs/AGENTE-IA.md).
 
 ## Criar um perfil de máquina
 

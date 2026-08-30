@@ -4,12 +4,15 @@ param(
     [string]$Config = '',
     [string]$ProjectPath = '',
     [string]$Command = '',
-    [ValidateSet('Direct','Managed','Review')]
-    [string]$Mode = ''
+    [ValidateSet('Direct','Managed','Review','Private')]
+    [string]$Mode = '',
+    [Alias('sem-memoria')][switch]$WithoutMemory,
+    [Alias('nova')][switch]$Fresh
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+$privateCodexHome = ''
 if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $root 'config\machine.psd1' }
 Import-Module (Join-Path $PSScriptRoot 'lib\PcSetup.Core.psm1') -Force
 Import-Module (Join-Path $root 'wsl\PcSetup.Wsl.psm1') -Force
@@ -44,11 +47,13 @@ function Select-PcSetupAgentMode {
         Write-Host '  2. Revisao - projeto somente leitura; continua online para o Codex'
     }
     Write-Host '  3. Direto - compatibilidade com o fluxo anterior, mantendo hooks do ai-memory'
-    $selection = Read-Host 'Escolha 1, 2 ou 3; Enter usa 1'
+    Write-Host '  4. Sem memoria - projeto gravavel e isolado, sem MCP, hooks ou captura do ai-memory'
+    $selection = Read-Host 'Escolha 1, 2, 3 ou 4; Enter usa 1'
     if ([string]::IsNullOrWhiteSpace($selection) -or $selection -eq '1') { return $defaultMode }
     if ($selection -eq '2' -and $AgentConfiguration.Launcher.ReviewEnabled) { return 'Review' }
     if ($selection -eq '3') { return 'Direct' }
-    throw 'Modo invalido. Use 1, 2 ou 3.'
+    if ($selection -eq '4') { return 'Private' }
+    throw 'Modo invalido. Use 1, 2, 3 ou 4.'
 }
 
 function Get-PcSetupSensitiveProjectMatches {
@@ -143,7 +148,9 @@ try {
 
     if ([string]::IsNullOrWhiteSpace($Command)) { $Command = [string]$configuration.Agent.DefaultCommand }
     if ($Command -notmatch '^[A-Za-z0-9._-]+$') { throw 'O comando do agente deve ser somente o nome de um executavel.' }
+    if ($WithoutMemory) { $Mode = 'Private' }
     if ([string]::IsNullOrWhiteSpace($Mode)) { $Mode = Select-PcSetupAgentMode -AgentConfiguration $configuration.Agent }
+    if ($Fresh -and $Mode -ne 'Managed') { throw 'A opcao -Fresh/--nova exige o modo Managed.' }
     if ($Mode -eq 'Review' -and -not $configuration.Agent.Launcher.ReviewEnabled) { throw 'O modo Review esta desabilitado na configuracao.' }
     if ($Mode -eq 'Managed' -and (-not $configuration.Agent.Memory.Enabled -or [string]$configuration.Agent.Memory.LaunchMode -ne 'Managed')) { throw 'O modo Managed exige Agent.Memory habilitado e configurado para Managed.' }
     if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
@@ -195,7 +202,7 @@ try {
     if (-not $harnessEntryPoint.StartsWith($harnessPackageRoot.TrimEnd('/') + '/', [StringComparison]::Ordinal)) {
         throw "O executavel do agente sai da raiz gerenciada: $harnessEntryPoint"
     }
-    if ($Mode -eq 'Managed') {
+    if ($Mode -in @('Managed','Private')) {
         & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec test -x /usr/local/bin/ai-memory
         if ($LASTEXITCODE -ne 0) { throw 'ai-memory ausente. Execute ATUALIZAR.cmd e tente novamente.' }
     }
@@ -211,7 +218,7 @@ try {
     }
 
     $strictLockdown = $Mode -eq 'Review' -or ($configuration.Agent.RestrictedMode.Enabled -and $configuration.Agent.RestrictedMode.Lockdown)
-    if (-not $strictLockdown -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
+    if ($Mode -in @('Managed','Direct') -and -not $strictLockdown -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
         $memoryService = 'pc-setup-ai-memory-' + $environmentDefinition.Name.ToLowerInvariant() + '.service'
         & wsl.exe --distribution $distribution --user root --exec systemctl start $memoryService
         if ($LASTEXITCODE -ne 0) { throw "Nao foi possivel iniciar o servico do ai-memory: $memoryService. Execute ATUALIZAR.cmd e consulte o relatorio WSL." }
@@ -242,7 +249,7 @@ try {
         if ($capabilities.Tailscale) { '--tailscale' } else { '--no-tailscale' }
         if ($capabilities.Pictures) { '--pictures' } else { '--no-pictures' }
         )
-        if ($profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
+        if ($Mode -in @('Managed','Direct') -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
             $aiJailArguments += @('--rw-map', "/home/$($profile.LinuxUser)/.local/share/ai-memory")
         }
         $aiJailArguments += @(
@@ -258,7 +265,17 @@ try {
     # Use o ponto de entrada canonico dentro do pacote: montar o symlink isolado
     # faria o Node procurar package.json em ~/.local/bin e tratar ESM como CommonJS.
     $aiJailArguments += @('--map', $harnessScopeRoot)
-    if ($capabilities.PersistAgentState) {
+    if ($Mode -eq 'Private') {
+        $privateHomeOutput = @(& wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec mktemp -d '/tmp/pc-setup-codex-private.XXXXXX')
+        if ($LASTEXITCODE -ne 0 -or $privateHomeOutput.Count -eq 0) { throw 'Nao foi possivel criar o estado temporario do modo sem memoria.' }
+        $privateCodexHome = ([string]$privateHomeOutput[-1]).Replace([string][char]0, [string]::Empty).Trim()
+        if ($privateCodexHome -notmatch '^/tmp/pc-setup-codex-private\.[A-Za-z0-9]+$') { throw 'O caminho temporario do modo sem memoria e invalido.' }
+        $preparePrivateHome = 'src="$HOME/.codex"; dst="$1"; for file in auth.json config.toml; do [ ! -f "$src/$file" ] || cp -- "$src/$file" "$dst/$file"; done; CODEX_HOME="$dst" /usr/local/bin/ai-memory uninstall --only hooks --apply --yes >/dev/null; CODEX_HOME="$dst" /usr/local/bin/ai-memory uninstall --only mcp --apply --yes >/dev/null'
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec bash -c $preparePrivateHome -- $privateCodexHome
+        if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel preparar a configuracao temporaria sem ai-memory.' }
+        $aiJailArguments += @('--rw-map', $privateCodexHome, '--env', 'CODEX_HOME')
+    }
+    elseif ($capabilities.PersistAgentState) {
         $agentStatePath = "/home/$($profile.LinuxUser)/.codex"
         & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec test -d $agentStatePath
         if ($LASTEXITCODE -ne 0) { throw "Estado do Codex ausente: $agentStatePath. Execute ATUALIZAR.cmd." }
@@ -274,28 +291,44 @@ try {
     foreach ($environmentVariable in @($configuration.Agent.EnvironmentAllowList)) {
         $aiJailArguments += @('--env', [string]$environmentVariable)
     }
-    if (-not $strictLockdown -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
+    if ($Mode -in @('Managed','Direct') -and -not $strictLockdown -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
         $aiJailArguments += @('--env', 'AI_MEMORY_AUTH_TOKEN', '--env', 'AI_MEMORY_SERVER_URL')
     }
 
-    $sandboxCommand = if ($Mode -eq 'Managed' -and -not $strictLockdown) { @('ai-memory', 'run', '--executable', $harnessEntryPoint, $Command) } else { @($harnessEntryPoint) }
+    $sandboxCommand = if ($Mode -eq 'Managed' -and -not $strictLockdown) { @('ai-memory', 'run') + $(if ($Fresh) { @('--fresh') } else { @() }) + @('--executable', $harnessEntryPoint, $Command) } else { @($harnessEntryPoint) }
     $aiJailArguments += @('--') + $sandboxCommand
 
     Test-PcSetupSandboxedHarness -Distribution $distribution -LinuxUser ([string]$profile.LinuxUser) -ProjectPath $wslProjectPath -Command $Command -EntryPoint $harnessEntryPoint -ModuleRoot $harnessScopeRoot
 
-    $isolationLabel = if ($strictLockdown) { 'revisao somente leitura; online para autenticacao do Codex' } elseif ($Mode -eq 'Managed') { 'ai-jail restrito com workstream gerenciado pelo ai-memory' } else { 'ai-jail restrito com hooks do ai-memory' }
+    $isolationLabel = if ($strictLockdown) { 'revisao somente leitura; online para autenticacao do Codex' } elseif ($Mode -eq 'Managed') { 'ai-jail restrito com workstream gerenciado pelo ai-memory' } elseif ($Mode -eq 'Private') { 'ai-jail restrito sem captura ou persistencia do ai-memory' } else { 'ai-jail restrito com hooks do ai-memory' }
     Write-Host "[AGENTE] $Command em $wslProjectPath via $isolationLabel." -ForegroundColor Cyan
-    if (-not $strictLockdown -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
+    if ($Mode -in @('Managed','Direct') -and -not $strictLockdown -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
         $memoryServerUrl = [string]$profile.AiMemory.ServerUrl
         $launchScript = 'set -a; . "$HOME/.config/ai-memory/env"; set +a; export AI_MEMORY_SERVER_URL="$1"; shift; exec /usr/local/bin/ai-jail "$@"'
         & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec bash -c $launchScript -- $memoryServerUrl @aiJailArguments
     }
     else {
-        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec /usr/local/bin/ai-jail @aiJailArguments
+        if ($Mode -eq 'Private') {
+            $privateLaunchScript = 'export CODEX_HOME="$1"; shift; exec /usr/local/bin/ai-jail "$@"'
+            & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec bash -c $privateLaunchScript -- $privateCodexHome @aiJailArguments
+        }
+        else { & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec /usr/local/bin/ai-jail @aiJailArguments }
     }
-    exit $LASTEXITCODE
+    $agentExitCode = $LASTEXITCODE
+    if ($Mode -eq 'Managed') {
+        $finalizeScript = 'set -a; . "$HOME/.config/ai-memory/env"; set +a; export AI_MEMORY_SERVER_URL="$1"; cd -- "$2"; exec /usr/local/bin/ai-memory finalize-session --agent codex'
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec bash -c $finalizeScript -- $memoryServerUrl $wslProjectPath
+        if ($LASTEXITCODE -ne 0) { Write-Warning 'O Codex terminou, mas o ai-memory nao conseguiu finalizar a sessao. O codigo de saida original sera preservado.' }
+    }
+    exit $agentExitCode
 }
 catch {
     Write-Host "[ERRO] $($_.Exception.Message)" -ForegroundColor Red
     exit 1
+}
+finally {
+    if ($privateCodexHome -match '^/tmp/pc-setup-codex-private\.[A-Za-z0-9]+$') {
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec rm -rf -- $privateCodexHome
+        if ($LASTEXITCODE -ne 0) { Write-Warning "Nao foi possivel remover o estado temporario sem memoria: $privateCodexHome" }
+    }
 }
