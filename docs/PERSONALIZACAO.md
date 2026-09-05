@@ -75,13 +75,15 @@ O padrão `RestoreKnownFoldersToProfile = $true` corrige instalações feitas co
 
 Na raiz de dados, a estrutura do usuário contém `Apps`, `Containers`, `Dev`, `Drive`, `Games` e `VMs`. A entrada `Data` é uma junção para `C:\Users\Felipe`; ela oferece navegação conveniente, mas não move nem duplica o perfil. Um caminho real já existente no lugar da junção interrompe a etapa sem apagar nada.
 
-`GoogleDrive.Enabled = $true` registra `Storage.Paths.Drive` como ponto de montagem do Google Drive em modo streaming, usando a [configuração avançada documentada pelo Google](https://knowledge.workspace.google.com/admin/drive/advanced-drive-for-desktop-configuration?hl=pt). A pasta precisa estar vazia na primeira configuração. O script não faz login, não guarda credenciais e não move o cache local do cliente. Se o Google Drive já estiver aberto, a nova localização pode aparecer somente depois de reiniciar o aplicativo.
+`GoogleDrive.Enabled = $true` valida `Storage.Paths.Drive` contra o `DefaultMountPoint` do Drive para computador em modo streaming, usando a [configuração avançada documentada pelo Google](https://knowledge.workspace.google.com/admin/drive/advanced-drive-for-desktop-configuration?hl=pt). O `pc-setup` não cria nem sobrescreve esse valor: se a chave `HKCU\Software\Google\DriveFS` ou a propriedade `DefaultMountPoint` ainda não existir, o relatório registra `PendingManual`, orienta abrir/configurar o Google Drive uma vez e continua com as demais etapas. Uma nova execução detecta o valor depois que o cliente o tiver criado.
+
+O perfil padrão usa `RequireConfiguredMountPoint = $false`. Mude para `$true` apenas quando a reconciliação deva falhar caso o mount point ainda não esteja definido. Um valor presente mas inválido, ou apontando para um local diferente de `Storage.Paths.Drive`, continua bloqueando a etapa para preservar uma configuração existente em vez de alterá-la silenciosamente. O script não faz login, não guarda credenciais e não move o cache local do cliente.
 
 Esse mecanismo não muda automaticamente os diretórios internos de Docker, Steam ou Epic. Eles continuam documentados como integrações próprias porque cada aplicativo possui seu formato e seu ciclo de vida.
 
 ## Plano de fundo
 
-Coloque a imagem em `config\wallpapers` e informe o caminho relativo:
+Coloque a imagem dentro do projeto e informe o caminho relativo:
 
 ```powershell
 WallpaperPath = 'config\wallpapers\minha-imagem.jpg'
