@@ -312,9 +312,10 @@
             Name    = 'Data'
         }
         GoogleDrive = @{
-            Enabled = $true
-            Mode    = 'Streaming'
-            PathKey = 'Drive'
+            Enabled                     = $true
+            Mode                        = 'Streaming'
+            PathKey                     = 'Drive'
+            RequireConfiguredMountPoint = $false
         }
         # Coloque a imagem dentro do projeto e informe o caminho relativo; vazio mantem o plano atual.
         WallpaperPath            = 'config\wallpapers\gargantua-realistic.png'
