@@ -107,27 +107,60 @@ function Set-PcSetupProfileJunction {
     return [pscustomobject]@{ Path = $linkPath; Target = $expectedTarget; Action = 'Created' }
 }
 
-function Set-PcSetupGoogleDriveStreamingMountPoint {
-    param([Parameter(Mandatory)][string]$Path)
+function Get-PcSetupGoogleDriveStreamingMountPointState {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [bool]$RequireConfiguredMountPoint = $false,
+        [string]$RegistryPath = 'HKCU:\Software\Google\DriveFS'
+    )
 
-    $mountPoint = [IO.Path]::GetFullPath($Path).TrimEnd('\')
-    if (-not (Test-Path -LiteralPath $mountPoint -PathType Container)) { throw "A pasta do Google Drive ainda nao existe: $mountPoint" }
-    $registryPath = 'HKCU:\Software\Google\DriveFS'
-    $current = $null
-    if (Test-Path -LiteralPath $registryPath) {
-        $current = Get-ItemPropertyValue -LiteralPath $registryPath -Name 'DefaultMountPoint' -ErrorAction SilentlyContinue
+    $expectedMountPoint = [IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $instruction = "Abra o Google Drive para computador, conclua a configuracao inicial e defina o ponto de montagem como $expectedMountPoint; depois execute a reconciliacao novamente."
+
+    if (-not (Test-Path -LiteralPath $RegistryPath)) {
+        if ($RequireConfiguredMountPoint) {
+            throw "Google Drive: a chave $RegistryPath ainda nao existe, mas RequireConfiguredMountPoint esta habilitado. $instruction"
+        }
+        Write-Warning "Google Drive pendente: a chave $RegistryPath ainda nao existe. $instruction"
+        return [pscustomobject]@{
+            Path = $expectedMountPoint; RegistryPath = $RegistryPath; Status = 'PendingManual'; Action = 'PendingManual'
+            State = 'RegistryKeyMissing'; CurrentValue = $null; Instruction = $instruction
+        }
     }
-    if (-not [string]::IsNullOrWhiteSpace([string]$current) -and [IO.Path]::GetFullPath([string]$current).TrimEnd('\') -eq $mountPoint) {
-        return [pscustomobject]@{ Path = $mountPoint; RegistryPath = $registryPath; Action = 'AlreadyConfigured' }
+
+    $driveFsSettings = Get-ItemProperty -LiteralPath $RegistryPath -ErrorAction Stop
+    $mountPointProperty = $driveFsSettings.PSObject.Properties['DefaultMountPoint']
+    if ($null -eq $mountPointProperty) {
+        if ($RequireConfiguredMountPoint) {
+            throw "Google Drive: DefaultMountPoint ainda nao existe em $RegistryPath, mas RequireConfiguredMountPoint esta habilitado. $instruction"
+        }
+        Write-Warning "Google Drive pendente: DefaultMountPoint ainda nao existe em $RegistryPath. $instruction"
+        return [pscustomobject]@{
+            Path = $expectedMountPoint; RegistryPath = $RegistryPath; Status = 'PendingManual'; Action = 'PendingManual'
+            State = 'DefaultMountPointMissing'; CurrentValue = $null; Instruction = $instruction
+        }
     }
-    if (Get-ChildItem -LiteralPath $mountPoint -Force -ErrorAction Stop | Select-Object -First 1) {
-        throw "O Google Drive exige um ponto de montagem vazio. Revise manualmente o conteudo de $mountPoint; nada foi removido."
+
+    $rawCurrent = [string]$mountPointProperty.Value
+    if ([string]::IsNullOrWhiteSpace($rawCurrent) -or $rawCurrent -match "[`r`n]") {
+        throw "Google Drive: DefaultMountPoint existe em $RegistryPath, mas possui um valor invalido. O pc-setup nao alterou o Registro."
     }
-    if (-not (Test-Path -LiteralPath $registryPath)) { New-Item -Path $registryPath -Force | Out-Null }
-    New-ItemProperty -LiteralPath $registryPath -Name 'DefaultMountPoint' -PropertyType String -Value $mountPoint -Force | Out-Null
-    $confirmed = [string](Get-ItemPropertyValue -LiteralPath $registryPath -Name 'DefaultMountPoint' -ErrorAction Stop)
-    if ([IO.Path]::GetFullPath($confirmed).TrimEnd('\') -ne $mountPoint) { throw 'O ponto de montagem do Google Drive nao foi confirmado no perfil atual.' }
-    return [pscustomobject]@{ Path = $mountPoint; RegistryPath = $registryPath; Action = 'Configured' }
+    $expandedCurrent = [Environment]::ExpandEnvironmentVariables($rawCurrent.Trim())
+    if ($expandedCurrent -notmatch '^[A-Za-z]:($|\\.*)$') {
+        throw "Google Drive: DefaultMountPoint possui um valor invalido ou nao suportado: '$rawCurrent'. O pc-setup nao alterou o Registro."
+    }
+    if ($expandedCurrent -match '^[A-Za-z]:$') { $expandedCurrent += '\' }
+    try { $currentMountPoint = [IO.Path]::GetFullPath($expandedCurrent).TrimEnd('\') }
+    catch { throw "Google Drive: DefaultMountPoint possui um caminho invalido: '$rawCurrent'. O pc-setup nao alterou o Registro." }
+
+    if ($currentMountPoint -ine $expectedMountPoint) {
+        throw "Google Drive: DefaultMountPoint aponta para '$rawCurrent', mas o pc-setup espera '$expectedMountPoint'. O valor existente foi preservado; ajuste o Google Drive ou a configuracao antes de continuar."
+    }
+
+    return [pscustomobject]@{
+        Path = $expectedMountPoint; RegistryPath = $RegistryPath; Status = 'Configured'; Action = 'AlreadyConfigured'
+        State = 'Configured'; CurrentValue = $rawCurrent; Instruction = $null
+    }
 }
 
 function Get-PcSetupEmptyStartAsset {
@@ -240,6 +273,13 @@ if (-not $personalization.Enabled) {
     Write-Host '[IGNORADO] Personalizacao desabilitada.'
     return [pscustomobject]@{ Step = 'Personalization'; Mode = $mode; Enabled = $false; Action = 'None' }
 }
+$googleDriveRequiresMountPoint = $false
+if ($personalization.GoogleDrive.Enabled -and $personalization.GoogleDrive.ContainsKey('RequireConfiguredMountPoint')) {
+    if (-not ($personalization.GoogleDrive.RequireConfiguredMountPoint -is [bool])) {
+        throw 'Personalization.GoogleDrive.RequireConfiguredMountPoint deve ser booleano.'
+    }
+    $googleDriveRequiresMountPoint = [bool]$personalization.GoogleDrive.RequireConfiguredMountPoint
+}
 
 $wallpaperSource = $null
 if (-not [string]::IsNullOrWhiteSpace([string]$personalization.WallpaperPath)) {
@@ -266,7 +306,12 @@ if ($personalization.Taskbar.Enabled) { $planActions += "Tentar aplicar $(@($per
 if ($personalization.RedirectKnownFolders) { $planActions += "Redirecionar pastas pessoais para Storage.Paths.$($personalization.KnownFoldersPathKey), copiando o conteudo sem apagar a origem" }
 if ($personalization.RestoreKnownFoldersToProfile) { $planActions += 'Restaurar as pastas pessoais para o perfil padrao do Windows, copiando o conteudo sem apagar a origem antiga' }
 if ($personalization.ProfileLink.Enabled) { $planActions += "Criar a juncao $($personalization.ProfileLink.Name) para o perfil original do Windows" }
-if ($personalization.GoogleDrive.Enabled) { $planActions += "Configurar Google Drive em streaming usando Storage.Paths.$($personalization.GoogleDrive.PathKey)" }
+if ($personalization.GoogleDrive.Enabled) {
+    $googleDrivePlan = "Validar Google Drive em streaming usando Storage.Paths.$($personalization.GoogleDrive.PathKey) sem criar ou sobrescrever DefaultMountPoint"
+    if ($googleDriveRequiresMountPoint) { $googleDrivePlan += '; exigir mount point ja configurado' }
+    else { $googleDrivePlan += '; registrar ausencia como pendencia manual' }
+    $planActions += $googleDrivePlan
+}
 if ($wallpaperSource) { $planActions += "Aplicar plano de fundo: $wallpaperSource" }
 if ($lockScreenSource) { $planActions += "Preparar a tela de bloqueio para selecao manual: $lockScreenSource" }
 if ($mode -eq 'Plan') {
@@ -417,8 +462,8 @@ if ($personalization.ProfileLink.Enabled) {
 $googleDriveResult = $null
 if ($personalization.GoogleDrive.Enabled) {
     $googleDrivePath = [string]$configuredPaths[[string]$personalization.GoogleDrive.PathKey]
-    $googleDriveResult = Set-PcSetupGoogleDriveStreamingMountPoint -Path $googleDrivePath
-    $actions += "GoogleDriveStreaming:$($googleDriveResult.Action)"
+    $googleDriveResult = Get-PcSetupGoogleDriveStreamingMountPointState -Path $googleDrivePath -RequireConfiguredMountPoint $googleDriveRequiresMountPoint
+    $actions += "GoogleDriveStreaming:$($googleDriveResult.Status)"
 }
 
 $wallpaperTarget = $null
