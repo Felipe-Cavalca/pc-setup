@@ -13,6 +13,7 @@
         'ca-certificates'
         'curl'
         'git'
+        'gh'
         'jq'
         'nodejs'
         'npm'
