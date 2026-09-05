@@ -13,6 +13,35 @@ if ([string]::IsNullOrWhiteSpace($Config)) { $Config = Join-Path $root 'config\m
 Import-Module (Join-Path $root 'scripts\lib\PcSetup.Core.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PcSetup.Wsl.psm1') -Force
 
+function Invoke-PcSetupAiMemoryUpgradePreparation {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Distribution,
+        [Parameter(Mandatory)][string]$ScriptPath,
+        [Parameter(Mandatory)]$EnvironmentDefinition,
+        [Parameter(Mandatory)][hashtable]$Profile
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5.1 materializa stderr nativo como ErrorRecord.
+        # O codigo de saida do helper continua sendo a fonte de verdade.
+        $ErrorActionPreference = 'Continue'
+        $output = @(& wsl.exe --distribution $Distribution --user root --exec bash -- $ScriptPath `
+            --profile-name ([string]$EnvironmentDefinition.Name) `
+            --linux-user ([string]$Profile.LinuxUser) 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    @($output | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) { [string]$_.Exception.Message }
+        else { [string]$_ }
+    }) | Out-Host
+    if ($exitCode -ne 0) { throw "Preparacao do upgrade do ai-memory falhou com codigo $exitCode." }
+}
+
 $mode = Get-PcSetupExecutionMode -Plan:$Plan -Apply:$Apply
 $configuration = Import-PcSetupConfiguration -Path $Config
 $target = Resolve-PcSetupWslTarget -Configuration $configuration -EnvironmentName $Environment
@@ -57,8 +86,20 @@ else {
 
 $bootstrapLinuxPath = ConvertTo-PcSetupWslPath -Distribution $distribution -WindowsPath (Join-Path $PSScriptRoot 'linux\bootstrap.sh')
 $verifyLinuxPath = ConvertTo-PcSetupWslPath -Distribution $distribution -WindowsPath (Join-Path $PSScriptRoot 'linux\verify.sh')
+$aiMemoryUpgradeEnabled = $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled
+if ($aiMemoryUpgradeEnabled) {
+    $aiMemoryUpgradeLinuxPath = ConvertTo-PcSetupWslPath -Distribution $distribution -WindowsPath (Join-Path $PSScriptRoot 'linux\prepare-ai-memory-upgrade.sh')
+    # A primeira passagem protege uma instalacao 1.x existente antes que o
+    # bootstrap troque o binario e reinicie o servico com ai-memory 2.x.
+    Invoke-PcSetupAiMemoryUpgradePreparation -Distribution $distribution -ScriptPath $aiMemoryUpgradeLinuxPath -EnvironmentDefinition $environmentDefinition -Profile $profile
+}
 $bootstrapResult = Invoke-PcSetupWslLinuxScript -Distribution $distribution -ScriptPath $bootstrapLinuxPath -Environment $environmentDefinition -Profile $profile
 if ($bootstrapResult.ExitCode -ne 0) { throw "Bootstrap Linux falhou com codigo $($bootstrapResult.ExitCode)." }
+if ($aiMemoryUpgradeEnabled) {
+    # Em uma instalacao nova o usuario Linux ainda nao existia na primeira
+    # passagem. Reaplicar torna o diretorio/drop-in parte do estado convergente.
+    Invoke-PcSetupAiMemoryUpgradePreparation -Distribution $distribution -ScriptPath $aiMemoryUpgradeLinuxPath -EnvironmentDefinition $environmentDefinition -Profile $profile
+}
 & wsl.exe --terminate $distribution | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Nao foi possivel reiniciar $distribution para aplicar /etc/wsl.conf." }
 $defaultUser = Get-PcSetupWslDefaultUser -Distribution $distribution
