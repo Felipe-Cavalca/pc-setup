@@ -60,7 +60,7 @@ Assert-True ($verifyFlow -match 'PassThru' -and $verifyFlow -match 'Pressione EN
 $assistedScript = Get-Content -Raw -LiteralPath (Join-Path $root 'scripts\Start-PcSetup.ps1')
 Assert-True ($assistedScript -match 'bootstrap\.ps1' -and $assistedScript -match 'verify\.ps1') 'O fluxo assistido deve executar plano, aplicacao e verificacao.'
 $agentLauncher = Get-Content -Raw -LiteralPath (Join-Path $root 'AGENTE.cmd')
-Assert-True ($agentLauncher -match 'Start-Agent\.ps1' -and $agentLauncher -match '%\*') 'O launcher do agente deve chamar o fluxo WSL isolado e aceitar parametros opcionais.'
+Assert-True ($agentLauncher -match 'Start-AgentWithGitHub\.ps1' -and $agentLauncher -match '%\*') 'O launcher do agente deve chamar o fluxo WSL isolado com o wrapper GitHub e aceitar parametros opcionais.'
 $testLauncher = Get-Content -Raw -LiteralPath (Join-Path $root 'TESTAR.cmd')
 Assert-True ($testLauncher -match 'tests\\run-all\.ps1') 'A suite local deve possuir launcher na raiz.'
 $updateLauncher = Get-Content -Raw -LiteralPath (Join-Path $root 'ATUALIZAR.cmd')
