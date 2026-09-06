@@ -39,11 +39,9 @@ else {
     Write-Warning "GitHub CLI nao autenticado para o usuario Linux $linuxUser. O agente sera aberto sem identidade GitHub. Execute 'wsl -d $distribution -u $linuxUser' e depois 'gh auth login'."
 }
 
-$script:PcSetupRealWsl = $realWsl
-$script:PcSetupGitHubConfigPath = $githubConfigPath
-$script:PcSetupUseGitHubConfig = $hasGitHubConfig
-
-function global:wsl.exe {
+# O proxy precisa sobreviver ao novo escopo criado quando Start-Agent.ps1 e chamado.
+# GetNewClosure captura estes tres valores e evita depender de $script: do chamador.
+$wslProxy = {
     $forward = @($args)
     $aiJailIndex = -1
     for ($i = 0; $i -lt $forward.Count; $i++) {
@@ -53,9 +51,9 @@ function global:wsl.exe {
         }
     }
 
-    if ($script:PcSetupUseGitHubConfig -and $aiJailIndex -ge 0 -and $forward -notcontains '--lockdown') {
+    if ($hasGitHubConfig -and $aiJailIndex -ge 0 -and $forward -notcontains '--lockdown') {
         $injected = @(
-            '--map', $script:PcSetupGitHubConfigPath,
+            '--map', $githubConfigPath,
             '--env', 'GIT_CONFIG_COUNT=1',
             '--env', 'GIT_CONFIG_KEY_0=credential.https://github.com.helper',
             '--env', 'GIT_CONFIG_VALUE_0=!gh auth git-credential'
@@ -68,8 +66,10 @@ function global:wsl.exe {
         $forward = @($prefix + $injected + $suffix)
     }
 
-    & $script:PcSetupRealWsl @forward
-}
+    & $realWsl @forward
+}.GetNewClosure()
+
+Set-Item -Path 'Function:\global:wsl.exe' -Value $wslProxy -Force
 
 $launcher = Join-Path $PSScriptRoot 'Start-Agent.ps1'
 $invoke = @{
@@ -81,4 +81,9 @@ $invoke = @{
 if ($WithoutMemory) { $invoke.WithoutMemory = $true }
 if ($Fresh) { $invoke.Fresh = $true }
 
-& $launcher @invoke
+try {
+    & $launcher @invoke
+}
+finally {
+    Remove-Item -Path 'Function:\global:wsl.exe' -Force -ErrorAction SilentlyContinue
+}
