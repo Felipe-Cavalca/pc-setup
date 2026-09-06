@@ -20,7 +20,7 @@ Assert-True ($wrapper -match '!gh auth git-credential') 'Git HTTPS deve usar o G
 Assert-True ($wrapper -match "\`$forward -notcontains '--lockdown'") 'O modo Review/lockdown nao deve receber a identidade GitHub.'
 Assert-True ($wrapper -notmatch 'gh auth token') 'O wrapper nao deve extrair nem copiar o token bruto do GitHub.'
 Assert-True ($wrapper -match '\.GetNewClosure\(\)') 'O proxy global de wsl.exe deve capturar o contexto do wrapper em uma closure.'
-Assert-True ($wrapper -match "Function:\\\\global\\wsl\.exe") 'O proxy deve ser publicado no escopo global para Start-Agent.ps1 encontra-lo.'
+Assert-True ($wrapper -match 'Function:\\global\\wsl\.exe') 'O proxy deve ser publicado no escopo global para Start-Agent.ps1 encontra-lo.'
 Assert-True ($wrapper -notmatch '\$script:PcSetup') 'O proxy nao pode depender do escopo de script do chamador.'
 Assert-True ($wrapper -match '& \$realWsl @forward') 'O proxy deve chamar o executavel WSL real capturado pela closure.'
 Assert-True ($rootLauncher -match 'Start-AgentWithGitHub\.ps1') 'AGENTE.cmd deve usar o wrapper GitHub.'
