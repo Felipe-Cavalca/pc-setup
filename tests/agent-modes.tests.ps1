@@ -27,6 +27,7 @@ Assert-True ($launcher -match "'--lockdown', '--network', '--no-agent-state'" -a
 Assert-True ($launcher -match 'Get-PcSetupSensitiveProjectMatches') 'O launcher deve executar o preflight de segredos.'
 Assert-True ($launcher.Contains('root="$1"') -and $launcher.Contains('cd -- "$root" || exit 2') -and $launcher.Contains('compgen -G "$pattern"')) 'O preflight deve tratar a raiz como caminho literal e aplicar glob somente aos padroes configurados.'
 Assert-True (-not $launcher.Contains('compgen -G "$root/$pattern"')) 'A raiz do projeto nao pode ser interpretada como glob.'
+Assert-True ($launcher.Contains('literal_prefix="${pattern%%[*?[]*}"') -and $launcher.Contains('[[ -r "$current" && -x "$current" ]] || exit 3')) 'O preflight deve sinalizar diretórios literais sensíveis que não podem ser inspecionados.'
 Assert-True ($launcher -notmatch 'find \"\$root\"') 'O preflight nao deve percorrer a arvore inteira do projeto com find.'
 Assert-True ($launcher -match '\$preflightMode\s*=\s*\[string\]\$configuration\.Agent\.ProjectSecrets\.PreflightMode') 'O comportamento de falha do preflight deve respeitar o modo configurado.'
 Assert-True ($launcher -match "if \(\`$preflightMode -eq 'Stop'\) \{ throw \}") 'O modo Stop deve continuar bloqueando quando a inspecao falhar.'
