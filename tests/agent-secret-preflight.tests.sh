@@ -10,7 +10,7 @@ match_script="$(awk '
     capture { print }
 ' "$launcher")"
 
-if [[ -z "$match_script" ]] || [[ "$match_script" != *'compgen -G "$pattern"'* ]]; then
+if [[ -z "$match_script" ]] || ! grep -Fq "compgen -G \"\$pattern\"" <<<"$match_script"; then
     echo 'FAIL: nao foi possivel extrair o matcher real do preflight.' >&2
     exit 1
 fi
