@@ -48,10 +48,19 @@ chmod 000 "$clean_project/blocked"
 clean_output="$(bash -c "$match_script" -- "$clean_project" "${patterns[@]}")"
 [[ -z "$clean_output" ]]
 
+unreadable_sensitive="$temp_root/unreadable-sensitive"
+mkdir -p -- "$unreadable_sensitive/secrets"
+chmod 000 "$unreadable_sensitive/secrets"
+set +e
+bash -c "$match_script" -- "$unreadable_sensitive" "${patterns[@]}" >/dev/null 2>&1
+unreadable_sensitive_exit=$?
+set -e
+[[ $unreadable_sensitive_exit -eq 3 ]]
+
 set +e
 bash -c "$match_script" -- "$temp_root/nao-existe" "${patterns[@]}" >/dev/null 2>&1
 missing_root_exit=$?
 set -e
 [[ $missing_root_exit -eq 2 ]]
 
-echo 'PASS: matcher real do preflight detecta segredos, trata raiz literal e ignora arvore nao relacionada.'
+echo 'PASS: matcher real detecta segredos, trata raiz literal, ignora arvore alheia e sinaliza subtree sensivel inacessivel.'
