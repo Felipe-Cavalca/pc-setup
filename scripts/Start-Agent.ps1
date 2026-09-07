@@ -71,6 +71,32 @@ shift
 cd -- "$root" || exit 2
 shopt -s nullglob globstar
 for pattern in "$@"; do
+    literal_prefix="${pattern%%[*?[]*}"
+    literal_parent='.'
+    if [[ "$literal_prefix" == */* ]]; then
+        literal_parent="${literal_prefix%/*}"
+        [[ -n "$literal_parent" ]] || literal_parent='.'
+    fi
+
+    if [[ "$literal_parent" != '.' ]]; then
+        current='.'
+        IFS='/' read -r -a path_parts <<< "$literal_parent"
+        for part in "${path_parts[@]}"; do
+            [[ -z "$part" || "$part" == '.' ]] && continue
+            [[ "$part" == '..' ]] && exit 3
+            current="$current/$part"
+            if [[ -e "$current" || -L "$current" ]]; then
+                if [[ -d "$current" ]]; then
+                    [[ -r "$current" && -x "$current" ]] || exit 3
+                else
+                    break
+                fi
+            else
+                break
+            fi
+        done
+    fi
+
     while IFS= read -r match; do
         printf '%s/%s\n' "$root" "$match"
         break
