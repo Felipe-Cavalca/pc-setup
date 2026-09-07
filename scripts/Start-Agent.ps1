@@ -65,8 +65,45 @@ function Get-PcSetupSensitiveProjectMatches {
     )
 
     if ($Patterns.Count -eq 0) { return @() }
-    $findScript = 'root="$1"; shift; for pattern in "$@"; do find "$root" -path "$root/.git" -prune -o -path "$root/node_modules" -prune -o -path "$root/vendor" -prune -o -path "$root/$pattern" -print -quit 2>/dev/null; done'
-    $output = @(& wsl.exe --distribution $Distribution --user $LinuxUser --exec bash -c $findScript -- $ProjectPath @Patterns)
+    $matchScript = @'
+root="$1"
+shift
+cd -- "$root" || exit 2
+shopt -s nullglob globstar
+for pattern in "$@"; do
+    literal_prefix="${pattern%%[*?[]*}"
+    literal_parent='.'
+    if [[ "$literal_prefix" == */* ]]; then
+        literal_parent="${literal_prefix%/*}"
+        [[ -n "$literal_parent" ]] || literal_parent='.'
+    fi
+
+    if [[ "$literal_parent" != '.' ]]; then
+        current='.'
+        IFS='/' read -r -a path_parts <<< "$literal_parent"
+        for part in "${path_parts[@]}"; do
+            [[ -z "$part" || "$part" == '.' ]] && continue
+            [[ "$part" == '..' ]] && exit 3
+            current="$current/$part"
+            if [[ -e "$current" || -L "$current" ]]; then
+                if [[ -d "$current" ]]; then
+                    [[ -r "$current" && -x "$current" ]] || exit 3
+                else
+                    break
+                fi
+            else
+                break
+            fi
+        done
+    fi
+
+    while IFS= read -r match; do
+        printf '%s/%s\n' "$root" "$match"
+        break
+    done < <(compgen -G "$pattern")
+done
+'@
+    $output = @(& wsl.exe --distribution $Distribution --user $LinuxUser --exec bash -c $matchScript -- $ProjectPath @Patterns)
     if ($LASTEXITCODE -ne 0) { throw 'O preflight de segredos nao conseguiu inspecionar o projeto.' }
     return @($output | ForEach-Object { ([string]$_).Replace([string][char]0, [string]::Empty).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
 }
@@ -207,13 +244,21 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'ai-memory ausente. Execute ATUALIZAR.cmd e tente novamente.' }
     }
 
-    if ([string]$configuration.Agent.ProjectSecrets.PreflightMode -ne 'Off') {
-        $sensitiveMatches = @(Get-PcSetupSensitiveProjectMatches -Distribution $distribution -LinuxUser ([string]$profile.LinuxUser) -ProjectPath $wslProjectPath -Patterns @($configuration.Agent.ProjectSecrets.DenyPaths))
+    $preflightMode = [string]$configuration.Agent.ProjectSecrets.PreflightMode
+    if ($preflightMode -ne 'Off') {
+        $sensitiveMatches = @()
+        try {
+            $sensitiveMatches = @(Get-PcSetupSensitiveProjectMatches -Distribution $distribution -LinuxUser ([string]$profile.LinuxUser) -ProjectPath $wslProjectPath -Patterns @($configuration.Agent.ProjectSecrets.DenyPaths))
+        }
+        catch {
+            if ($preflightMode -eq 'Stop') { throw }
+            Write-Warning "O preflight de segredos nao conseguiu inspecionar o projeto: $($_.Exception.Message) As regras --deny-path do ai-jail continuam ativas."
+        }
         if ($sensitiveMatches.Count -gt 0) {
             $relativeMatches = @($sensitiveMatches | ForEach-Object { $_.Substring($wslProjectPath.TrimEnd('/').Length).TrimStart('/') })
             Write-Host "[SEGREDOS] $($relativeMatches.Count) caminho(s) protegido(s) encontrado(s): $($relativeMatches -join ', ')" -ForegroundColor Yellow
             Write-Host 'Eles serao negados pelo ai-jail. Arquivos secretos criados depois da abertura exigem uma nova sessao para receber a regra.' -ForegroundColor Yellow
-            if ([string]$configuration.Agent.ProjectSecrets.PreflightMode -eq 'Stop') { throw 'O preflight encontrou caminhos sensiveis e a politica esta configurada como Stop.' }
+            if ($preflightMode -eq 'Stop') { throw 'O preflight encontrou caminhos sensiveis e a politica esta configurada como Stop.' }
         }
     }
 

@@ -57,9 +57,13 @@ jobs:
           bash -n wsl/linux/github-release.sh
           bash -n wsl/linux/prepare-ai-memory-upgrade.sh
           bash -n tests/wsl-link-resolution.tests.sh
+          bash -n tests/agent-secret-preflight.tests.sh
 
       - name: Analisar Bash
-        run: shellcheck wsl/linux/bootstrap.sh wsl/linux/verify.sh wsl/linux/github-release.sh wsl/linux/prepare-ai-memory-upgrade.sh tests/wsl-link-resolution.tests.sh
+        run: shellcheck wsl/linux/bootstrap.sh wsl/linux/verify.sh wsl/linux/github-release.sh wsl/linux/prepare-ai-memory-upgrade.sh tests/wsl-link-resolution.tests.sh tests/agent-secret-preflight.tests.sh
 
       - name: Testar resolução dos links do harness
         run: bash tests/wsl-link-resolution.tests.sh
+
+      - name: Testar preflight de segredos do agente
+        run: bash tests/agent-secret-preflight.tests.sh
