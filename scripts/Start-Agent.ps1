@@ -68,12 +68,13 @@ function Get-PcSetupSensitiveProjectMatches {
     $matchScript = @'
 root="$1"
 shift
+cd -- "$root" || exit 2
 shopt -s nullglob globstar
 for pattern in "$@"; do
     while IFS= read -r match; do
-        printf '%s\n' "$match"
+        printf '%s/%s\n' "$root" "$match"
         break
-    done < <(compgen -G "$root/$pattern")
+    done < <(compgen -G "$pattern")
 done
 '@
     $output = @(& wsl.exe --distribution $Distribution --user $LinuxUser --exec bash -c $matchScript -- $ProjectPath @Patterns)
