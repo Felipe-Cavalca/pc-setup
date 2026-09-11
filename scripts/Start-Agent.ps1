@@ -103,7 +103,7 @@ for pattern in "$@"; do
     done < <(compgen -G "$pattern")
 done
 '@
-    $output = @(& wsl.exe --distribution $Distribution --user $LinuxUser --exec bash -c $matchScript -- $ProjectPath @Patterns)
+    $output = @(& wsl.exe --distribution $Distribution --user $LinuxUser --exec bash -c $matchScript 'pc-setup' $ProjectPath @Patterns)
     if ($LASTEXITCODE -ne 0) { throw 'O preflight de segredos nao conseguiu inspecionar o projeto.' }
     return @($output | ForEach-Object { ([string]$_).Replace([string][char]0, [string]::Empty).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
 }
@@ -316,7 +316,7 @@ try {
         $privateCodexHome = ([string]$privateHomeOutput[-1]).Replace([string][char]0, [string]::Empty).Trim()
         if ($privateCodexHome -notmatch '^/tmp/pc-setup-codex-private\.[A-Za-z0-9]+$') { throw 'O caminho temporario do modo sem memoria e invalido.' }
         $preparePrivateHome = 'src="$HOME/.codex"; dst="$1"; for file in auth.json config.toml; do [ ! -f "$src/$file" ] || cp -- "$src/$file" "$dst/$file"; done; CODEX_HOME="$dst" /usr/local/bin/ai-memory uninstall --only hooks --apply --yes >/dev/null; CODEX_HOME="$dst" /usr/local/bin/ai-memory uninstall --only mcp --apply --yes >/dev/null'
-        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec bash -c $preparePrivateHome -- $privateCodexHome
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec bash -c $preparePrivateHome 'pc-setup' $privateCodexHome
         if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel preparar a configuracao temporaria sem ai-memory.' }
         $aiJailArguments += @('--rw-map', $privateCodexHome, '--env', 'CODEX_HOME')
     }
@@ -350,19 +350,19 @@ try {
     if ($Mode -in @('Managed','Direct') -and -not $strictLockdown -and $profile.ContainsKey('AiMemory') -and $profile.AiMemory.Enabled) {
         $memoryServerUrl = [string]$profile.AiMemory.ServerUrl
         $launchScript = 'set -a; . "$HOME/.config/ai-memory/env"; set +a; export AI_MEMORY_SERVER_URL="$1"; shift; exec /usr/local/bin/ai-jail "$@"'
-        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec bash -c $launchScript -- $memoryServerUrl @aiJailArguments
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec bash -c $launchScript 'pc-setup' $memoryServerUrl @aiJailArguments
     }
     else {
         if ($Mode -eq 'Private') {
             $privateLaunchScript = 'export CODEX_HOME="$1"; shift; exec /usr/local/bin/ai-jail "$@"'
-            & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec bash -c $privateLaunchScript -- $privateCodexHome @aiJailArguments
+            & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec bash -c $privateLaunchScript 'pc-setup' $privateCodexHome @aiJailArguments
         }
         else { & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --cd $wslProjectPath --exec /usr/local/bin/ai-jail @aiJailArguments }
     }
     $agentExitCode = $LASTEXITCODE
     if ($Mode -eq 'Managed') {
         $finalizeScript = 'set -a; . "$HOME/.config/ai-memory/env"; set +a; export AI_MEMORY_SERVER_URL="$1"; cd -- "$2"; exec /usr/local/bin/ai-memory finalize-session --agent codex'
-        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec bash -c $finalizeScript -- $memoryServerUrl $wslProjectPath
+        & wsl.exe --distribution $distribution --user ([string]$profile.LinuxUser) --exec bash -c $finalizeScript 'pc-setup' $memoryServerUrl $wslProjectPath
         if ($LASTEXITCODE -ne 0) { Write-Warning 'O Codex terminou, mas o ai-memory nao conseguiu finalizar a sessao. O codigo de saida original sera preservado.' }
     }
     exit $agentExitCode
