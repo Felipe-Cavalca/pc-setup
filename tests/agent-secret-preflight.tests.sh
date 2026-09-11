@@ -20,7 +20,7 @@ if ! grep -Fq "bash -c \$matchScript 'pc-setup' \$ProjectPath @Patterns" "$launc
     exit 1
 fi
 
-if grep -Fq 'bash -c $matchScript -- $ProjectPath @Patterns' "$launcher"; then
+if grep -Fq "bash -c \$matchScript -- \$ProjectPath @Patterns" "$launcher"; then
     echo 'FAIL: -- nao pode ser usado como argv[0] de bash -c atraves do wsl.exe.' >&2
     exit 1
 fi
