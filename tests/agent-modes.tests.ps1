@@ -32,6 +32,12 @@ Assert-True ($launcher -notmatch 'find \"\$root\"') 'O preflight nao deve percor
 Assert-True ($launcher -match '\$preflightMode\s*=\s*\[string\]\$configuration\.Agent\.ProjectSecrets\.PreflightMode') 'O comportamento de falha do preflight deve respeitar o modo configurado.'
 Assert-True ($launcher -match "if \(\`$preflightMode -eq 'Stop'\) \{ throw \}") 'O modo Stop deve continuar bloqueando quando a inspecao falhar.'
 Assert-True ($launcher -match 'Write-Warning .*regras --deny-path do ai-jail continuam ativas') 'O modo Warn deve continuar a sessao informando que deny-path permanece ativo.'
+Assert-True ($launcher.Contains("bash -c `$matchScript 'pc-setup' `$ProjectPath @Patterns")) 'O preflight deve reservar argv[0] antes do caminho do projeto.'
+Assert-True ($launcher.Contains("bash -c `$preparePrivateHome 'pc-setup' `$privateCodexHome")) 'A preparacao privada deve reservar argv[0] antes do estado temporario.'
+Assert-True ($launcher.Contains("bash -c `$launchScript 'pc-setup' `$memoryServerUrl @aiJailArguments")) 'O launcher gerenciado deve reservar argv[0] antes da URL do ai-memory.'
+Assert-True ($launcher.Contains("bash -c `$privateLaunchScript 'pc-setup' `$privateCodexHome @aiJailArguments")) 'O launcher privado deve reservar argv[0] antes do CODEX_HOME.'
+Assert-True ($launcher.Contains("bash -c `$finalizeScript 'pc-setup' `$memoryServerUrl `$wslProjectPath")) 'A finalizacao deve reservar argv[0] antes dos argumentos do ai-memory.'
+Assert-True (-not $launcher.Contains('bash -c $matchScript -- $ProjectPath')) 'O launcher nao pode depender de -- como argv[0] atraves do wsl.exe.'
 Assert-True ($launcher -match "'--env', 'AI_MEMORY_AUTH_TOKEN'") 'O token local do ai-memory deve ser encaminhado por nome, sem entrar na configuracao.'
 Assert-True ($launcher -match 'finalize-session --agent codex' -and $launcher -match '\$agentExitCode') 'A saida gerenciada deve finalizar a sessao sem ocultar o codigo do Codex.'
 Assert-True ($launcher -match 'CODEX_HOME' -and $launcher -match 'uninstall --only hooks' -and $launcher -match 'uninstall --only mcp' -and $launcher -match 'pc-setup-codex-private') 'O modo privado deve usar configuracao temporaria sem hooks ou MCP do ai-memory.'
@@ -41,4 +47,4 @@ Assert-True ($rootLauncher -notmatch '-Mode\s+(Managed|Direct|Review|Private)') 
 Assert-True ($commandInstaller -match 'Get-Command agente -All' -and $commandInstaller -match "SetEnvironmentVariable\('Path'" -and $commandInstaller -match 'Invoke-AgentCommand\.cmd') 'O setup deve instalar o comando agente sem sobrescrever conflitos no PATH.'
 Assert-True ($commandWrapper -match 'ProjectPath "%CD%"' -and $commandWrapper -match 'Mode Managed' -and $commandWrapper -match 'Mode Private' -and $commandWrapper -match '--sem-memoria' -and $commandWrapper -match '--nova') 'O comando agente deve usar o projeto atual, Managed por padrao e expor os modos privados/novo.'
 
-Write-Host 'PASS: modos simples do agente, pasta atual, ai-memory gerenciado e preflight de segredos.' -ForegroundColor Green
+Write-Host 'PASS: modos simples do agente, argv preservado no WSL, ai-memory gerenciado e preflight de segredos.' -ForegroundColor Green
