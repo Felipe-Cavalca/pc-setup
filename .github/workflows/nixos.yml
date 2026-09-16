@@ -1,0 +1,70 @@
+name: NixOS
+
+on:
+  push:
+    branches:
+      - nix
+    paths:
+      - 'nixos/**'
+      - '.github/workflows/nixos.yml'
+  pull_request:
+    paths:
+      - 'nixos/**'
+      - '.github/workflows/nixos.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    name: Evaluate NixOS configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Check install script
+        run: |
+          bash -n nixos/scripts/install.sh
+          shellcheck nixos/scripts/install.sh
+
+      - name: Parse Nix files
+        run: |
+          find nixos -name '*.nix' -print0 | xargs -0 -n1 nix-instantiate --parse >/dev/null
+
+      - name: Supply CI-only filesystem layout
+        run: |
+          cat > nixos/hosts/np55xdakf2br/hardware-configuration.nix <<'EOF'
+          { lib, ... }:
+          {
+            fileSystems."/" = {
+              device = "/dev/disk/by-label/NIXOS";
+              fsType = "ext4";
+            };
+            fileSystems."/boot" = {
+              device = "/dev/disk/by-label/NIXBOOT";
+              fsType = "vfat";
+            };
+            fileSystems."/efi" = {
+              device = "/dev/disk/by-label/WINDOWS-ESP";
+              fsType = "vfat";
+            };
+            nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
+          }
+          EOF
+
+      - name: Evaluate system closure
+        run: |
+          nix eval \
+            ./nixos#nixosConfigurations.np55xdakf2br.config.system.build.toplevel.drvPath \
+            --raw \
+            --no-write-lock-file
