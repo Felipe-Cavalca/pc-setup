@@ -13,7 +13,6 @@
     # installation pins every transitive input as well.
     ai-jail.url = "github:akitaonrails/ai-jail/v1.21.0";
     ai-memory.url = "github:akitaonrails/ai-memory/v2.2.2";
-    codex.url = "github:openai/codex/rust-v0.154.0";
   };
 
   outputs =

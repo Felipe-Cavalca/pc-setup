@@ -1,10 +1,10 @@
 { inputs, pkgs, ... }:
 let
-  system = pkgs.system;
+  system = pkgs.stdenv.hostPlatform.system;
 
   aiJail = inputs.ai-jail.packages.${system}.default;
   aiMemory = inputs.ai-memory.packages.${system}.default;
-  codex = inputs.codex.packages.${system}.default;
+  codex = pkgs.codex;
 
   agentSession = pkgs.writeShellApplication {
     name = "pc-agent-session";
