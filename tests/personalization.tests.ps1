@@ -38,6 +38,11 @@ Assert-True ($personalization -match 'HKCU:\\Software\\Google\\DriveFS' -and $pe
 Assert-True ($personalization -match 'ArchiveSha256' -and $personalization -match 'Assets' -and $personalization -match 'start2\.bin') 'A limpeza dos fixados deve usar o layout da release validada por hash.'
 Assert-True ($personalization -match 'StartMenuExperienceHost' -and $personalization -match 'LockScreenPreparedForManualSelection' -and $personalization -match 'ms-settings:lockscreen') 'O menu Iniciar deve recarregar e a tela de bloqueio deve possuir orientacao manual configurada.'
 Assert-True ($profile -match '\[switch\]\$IncludePersonalization' -and $profile -match '82-personalization-machine\.ps1' -and $profile -match '80-personalization\.ps1') 'A fase diaria deve incluir ambas as partes somente quando solicitado.'
+Assert-True ($profile -match '\$personalizationStatus\s*=\s*if \(\$personalizationRequested\) \{ ''Pending'' \} else \{ ''NotRequested'' \}') 'A fase diaria deve distinguir personalizacao nao solicitada de uma tentativa pendente.'
+Assert-True ($profile -match '\$personalizationStatus\s*=\s*''Completed''' -and $profile -match '\$personalizationStatus\s*=\s*''Pending''') 'A tentativa de personalizacao deve registrar sucesso ou pendencia explicitamente.'
+Assert-True ($profile -match 'catch \{[\s\S]+Personalization[\s\S]+Action\s*=\s*''Pending''[\s\S]+Write-Warning') 'Falha da personalizacao deve ser capturada, registrada e avisada sem abortar a fase de usuario.'
+Assert-True ($profile -match 'PersonalizationStatus\s*=\s*\$personalizationStatus' -and $profile -match 'PersonalizationError\s*=\s*\$personalizationError') 'O relatorio da conta diaria deve preservar status e erro da personalizacao.'
+Assert-True ($profile -match 'Execute PERSONALIZAR\.cmd depois') 'A pendencia deve orientar uma nova tentativa isolada sem bloquear a atualizacao.'
 Assert-True ($update -match 'Deseja reaplicar a personalizacao' -and $update -match 'LauncherName -eq ''INSTALAR\.cmd''' -and $update -match 'ApplyOnInstall') 'A instalacao deve aplicar o padrao e a atualizacao deve perguntar.'
 Assert-True ($configuration.Personalization.Enabled -and $configuration.Personalization.Theme -eq 'Dark') 'O perfil padrao deve habilitar o tema escuro.'
 Assert-True ($configuration.Personalization.HideTaskbarSearch -and $configuration.Personalization.HideTaskView -and $configuration.Personalization.ClearStartPins) 'O perfil padrao deve limpar pesquisa, Visao de Tarefas e fixados.'
@@ -67,4 +72,4 @@ Assert-True (@($taskbarPins | Where-Object PinGeneration -ne '1').Count -eq 0) '
 $plan = & (Join-Path $root 'scripts\80-personalization.ps1') -Config (Join-Path $root 'config\machine.psd1') -Plan
 Assert-True ($plan.Action -eq 'Plan' -and @($plan.Actions).Count -ge 6) 'O modo Plan deve descrever as mudancas sem aplicar o Windows.'
 
-Write-Host 'PASS: personalizacao integrada, manual, configuravel e nao destrutiva.' -ForegroundColor Green
+Write-Host 'PASS: personalizacao integrada, pendencia resiliente, manual, configuravel e nao destrutiva.' -ForegroundColor Green

@@ -18,31 +18,53 @@ $applyReport = Assert-PcSetupCompletedApplyReport -Configuration $configuration 
 $steps = @()
 $steps += & (Join-Path $PSScriptRoot 'Install-AgentCommand.ps1') -Config $configuration._ConfigPath -Apply
 $steps += & (Join-Path $PSScriptRoot '60-packages.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $WindowsApplyReport -Apply
-if ($IncludePersonalization -and $configuration.Personalization.Enabled) {
-    $machinePersonalizationPath = Join-Path $PSScriptRoot '82-personalization-machine.ps1'
-    if (Test-PcSetupAdministrator) {
-        $steps += & $machinePersonalizationPath -Config $configuration._ConfigPath -WindowsApplyReport $WindowsApplyReport -Apply
+
+$personalizationRequested = [bool]($IncludePersonalization -and $configuration.Personalization.Enabled)
+$personalizationStatus = if ($personalizationRequested) { 'Pending' } else { 'NotRequested' }
+$personalizationError = $null
+if ($personalizationRequested) {
+    try {
+        $machinePersonalizationPath = Join-Path $PSScriptRoot '82-personalization-machine.ps1'
+        if (Test-PcSetupAdministrator) {
+            $steps += & $machinePersonalizationPath -Config $configuration._ConfigPath -WindowsApplyReport $WindowsApplyReport -Apply
+        }
+        else {
+            $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+            $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$machinePersonalizationPath`" -Config `"$($configuration._ConfigPath)`" -WindowsApplyReport `"$WindowsApplyReport`" -Apply"
+            $process = Start-Process -FilePath $windowsPowerShell -ArgumentList $arguments -Verb RunAs -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "A fase administrativa da personalizacao falhou com codigo $($process.ExitCode)." }
+            $steps += [pscustomobject]@{ Step = 'PersonalizationMachine'; Mode = 'Apply'; Enabled = $true; Action = 'CompletedInElevatedProcess' }
+        }
+        $steps += & (Join-Path $PSScriptRoot '80-personalization.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $WindowsApplyReport -Apply
+        $personalizationStatus = 'Completed'
     }
-    else {
-        $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-        $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$machinePersonalizationPath`" -Config `"$($configuration._ConfigPath)`" -WindowsApplyReport `"$WindowsApplyReport`" -Apply"
-        $process = Start-Process -FilePath $windowsPowerShell -ArgumentList $arguments -Verb RunAs -Wait -PassThru
-        if ($process.ExitCode -ne 0) { throw "A fase administrativa da personalizacao falhou com codigo $($process.ExitCode)." }
-        $steps += [pscustomobject]@{ Step = 'PersonalizationMachine'; Mode = 'Apply'; Enabled = $true; Action = 'CompletedInElevatedProcess' }
+    catch {
+        $personalizationError = $_.Exception.Message
+        $personalizationStatus = 'Pending'
+        $steps += [pscustomobject]@{
+            Step    = 'Personalization'
+            Mode    = 'Apply'
+            Enabled = $true
+            Action  = 'Pending'
+            Error   = $personalizationError
+        }
+        Write-Warning "A personalizacao ficou pendente e nao interrompera a reconciliacao principal. Motivo: $personalizationError"
+        Write-Warning 'Execute PERSONALIZAR.cmd depois para tentar a personalizacao isoladamente e obter o diagnostico dessa etapa.'
     }
-    $steps += & (Join-Path $PSScriptRoot '80-personalization.ps1') -Config $configuration._ConfigPath -WindowsApplyReport $WindowsApplyReport -Apply
 }
 
 $report = [ordered]@{
-    GeneratedAt        = (Get-Date).ToString('o')
-    Status             = 'Completed'
-    User               = $env:USERNAME
-    Profile            = $configuration.ProfileName
-    ConfigSha256       = $applyReport.ConfigSha256
-    ProjectSha256      = $applyReport.ProjectSha256
-    WindowsApplyReport = $WindowsApplyReport
-    Personalization    = [bool]$IncludePersonalization
-    Steps              = $steps
+    GeneratedAt           = (Get-Date).ToString('o')
+    Status                = 'Completed'
+    User                  = $env:USERNAME
+    Profile               = $configuration.ProfileName
+    ConfigSha256          = $applyReport.ConfigSha256
+    ProjectSha256         = $applyReport.ProjectSha256
+    WindowsApplyReport    = $WindowsApplyReport
+    Personalization       = $personalizationRequested
+    PersonalizationStatus = $personalizationStatus
+    PersonalizationError  = $personalizationError
+    Steps                 = $steps
 }
 $reportDirectory = Get-PcSetupRuntimePath -Configuration $configuration -Key 'UserReportDirectory'
 $reportPath = Join-Path $reportDirectory ('user-profile-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.json')
