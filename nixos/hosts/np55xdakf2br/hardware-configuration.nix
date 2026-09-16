@@ -4,18 +4,23 @@
     (modulesPath + "/installer/scan/not-detected.nix")
   ];
 
-  # IMPORTANT:
-  # Replace this file during installation with the output of:
-  #   nixos-generate-config --show-hardware-config
+  # INSTALLATION PLACEHOLDER
   #
-  # Filesystems and UUIDs are deliberately NOT committed here because they
-  # depend on the partitions created next to Windows on the 256 GB NVMe.
-  # Do not add the 1 TB data drive as a required filesystem for installation.
+  # nixos/scripts/install.sh replaces this file with the output of
+  # `nixos-generate-config --root /mnt --show-hardware-config` only after
+  # validating that /, /boot and /efi are all on the same <= 400 GiB disk
+  # containing the Windows Boot Manager.
+  #
+  # UUIDs are intentionally not guessed. The 1 TB data disk must not appear as
+  # a required filesystem in the generated file.
 
-  boot.initrd.availableKernelModules = [ "xhci_pci" "nvme" "usb_storage" "sd_mod" ];
-  boot.initrd.kernelModules = [ ];
+  boot.initrd.availableKernelModules = [
+    "xhci_pci"
+    "nvme"
+    "usb_storage"
+    "sd_mod"
+  ];
+
   boot.kernelModules = [ "kvm-intel" ];
-  boot.extraModulePackages = [ ];
-
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
 }

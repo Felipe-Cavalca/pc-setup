@@ -1,11 +1,19 @@
 { pkgs, ... }:
 {
+  programs.git.enable = true;
+
+  # Rootless Docker preserves the "daily user is not admin" model. The normal
+  # docker group is deliberately not granted because it is root-equivalent.
   virtualisation.docker = {
-    enable = true;
-    enableOnBoot = false;
+    enable = false;
+    rootless = {
+      enable = true;
+      setSocketVariable = true;
+    };
   };
 
-  programs.git.enable = true;
+  virtualisation.libvirtd.enable = true;
+  programs.virt-manager.enable = true;
 
   environment.systemPackages = with pkgs; [
     git

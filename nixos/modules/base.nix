@@ -1,21 +1,26 @@
 { pkgs, ... }:
 {
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
-  nix.settings.auto-optimise-store = true;
+  nixpkgs.config.allowUnfree = true;
+
+  nix.settings = {
+    experimental-features = [
+      "nix-command"
+      "flakes"
+    ];
+    auto-optimise-store = true;
+    allowed-users = [ "@users" ];
+    trusted-users = [
+      "root"
+      "admin"
+    ];
+  };
 
   networking.networkmanager.enable = true;
+  networking.firewall.enable = true;
+
   time.timeZone = "America/Sao_Paulo";
   i18n.defaultLocale = "pt_BR.UTF-8";
   console.keyMap = "br-abnt2";
-
-  users.users.felipe = {
-    isNormalUser = true;
-    description = "Felipe";
-    extraGroups = [ "networkmanager" "wheel" "docker" ];
-    shell = pkgs.bashInteractive;
-  };
-
-  security.sudo.wheelNeedsPassword = true;
 
   environment.systemPackages = with pkgs; [
     git
@@ -29,16 +34,20 @@
     unzip
     zip
     p7zip
+    unrar
     rsync
     rclone
     pciutils
     usbutils
     efibootmgr
     smartmontools
+    ntfs3g
+    exfatprogs
   ];
 
   services.openssh.enable = false;
   services.fstrim.enable = true;
+  services.udisks2.enable = true;
 
   zramSwap = {
     enable = true;
